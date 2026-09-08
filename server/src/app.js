@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 
+const mlRoutes = require("./routes/mlRoutes");
+
 const app = express();
 
 app.use(cors());
@@ -12,5 +14,8 @@ app.get("/api/health", (req, res) => {
     message: "PRJ-17 Radar Backend is running",
   });
 });
+
+// ML prediction routes
+app.use("/api/ml", mlRoutes);
 
 module.exports = app;
