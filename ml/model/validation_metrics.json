@@ -1,0 +1,35 @@
+{
+  "accuracy": 1.0,
+  "precision": 1.0,
+  "recall": 1.0,
+  "f1": 1.0,
+  "roc_auc": 0.9999999999999999,
+  "pr_auc": 1.0,
+  "confusion_matrix": [
+    [
+      8521,
+      0
+    ],
+    [
+      0,
+      1096
+    ]
+  ],
+  "features": [
+    "range",
+    "az",
+    "el",
+    "rcs",
+    "rv",
+    "vn",
+    "ve",
+    "vd",
+    "speed_mps",
+    "horizontal_speed_mps",
+    "inliers",
+    "duration"
+  ],
+  "samples": 32077,
+  "uav_samples": 3553,
+  "non_uav_samples": 28524
+}
