@@ -7,50 +7,46 @@ from pydantic import BaseModel, Field
 
 
 # =========================================================
-# PRJ-17 Radar System - ML API
+# PRJ-17 Radar System - Production ML API
 # =========================================================
 
 app = FastAPI(
     title="PRJ-17 Radar ML API",
-    version="1.0.0",
+    version="2.0.0",
     description="Real-time UAV classification service"
 )
 
 
 # =========================================================
-# MODEL PATH
+# MODEL CONFIGURATION
 # =========================================================
-
-# app.py is inside:
-# ml/api/app.py
-#
-# Therefore parent.parent = ml/
 
 BASE = Path(__file__).resolve().parent.parent
 
-MODEL_PATH = BASE / "model" / "uav_classifier.pkl"
+MODEL_PATH = BASE / "model" / "rf_uav_final.joblib"
+
+SAMPLE_THRESHOLD = 0.15
+PERSISTENCE_THRESHOLD = 0.50
+
+
+# Exact feature order used during final model training
+FEATURES = [
+    "range_m",
+    "azimuth_deg",
+    "elevation_deg",
+    "rcs_dbsm",
+    "radial_velocity_mps",
+    "velocity_n_mps",
+    "velocity_e_mps",
+    "velocity_d_mps"
+]
 
 
 # =========================================================
-# GLOBAL MODEL VARIABLES
+# GLOBAL MODEL
 # =========================================================
 
 model = None
-
-FEATURES = [
-    "range",
-    "az",
-    "el",
-    "rcs",
-    "rv",
-    "vn",
-    "ve",
-    "vd",
-    "speed_mps",
-    "horizontal_speed_mps",
-    "inliers",
-    "duration"
-]
 
 
 # =========================================================
@@ -60,37 +56,32 @@ FEATURES = [
 def load_model():
 
     global model
-    global FEATURES
 
     if not MODEL_PATH.exists():
 
         raise FileNotFoundError(
-            f"Model not found at: {MODEL_PATH}"
+            f"Production model not found at: {MODEL_PATH}"
         )
 
     bundle = joblib.load(MODEL_PATH)
 
-    # Our trained model was saved as:
-    #
-    # {
-    #     "model": trained_model,
-    #     "features": [...]
-    # }
+    if not isinstance(bundle, dict):
 
-    if isinstance(bundle, dict):
+        raise ValueError(
+            "Invalid model bundle. Expected dictionary."
+        )
 
-        model = bundle["model"]
+    model = bundle["model"]
 
-        if "features" in bundle:
+    # Verify the saved model's feature configuration
+    saved_features = bundle.get("features", FEATURES)
 
-            FEATURES = bundle["features"]
+    if saved_features != FEATURES:
 
-    else:
-
-        # Compatibility if the pickle contains
-        # only the Random Forest model.
-
-        model = bundle
+        raise ValueError(
+            "Model feature configuration does not match "
+            "the production API feature configuration."
+        )
 
 
 # =========================================================
@@ -107,6 +98,8 @@ def startup_event():
     print("----------------------------------------")
     print(f"Model: {MODEL_PATH}")
     print(f"Features: {FEATURES}")
+    print(f"Sample threshold: {SAMPLE_THRESHOLD}")
+    print(f"Persistence threshold: {PERSISTENCE_THRESHOLD}")
     print("Model loaded successfully")
     print("----------------------------------------")
 
@@ -122,76 +115,101 @@ def health():
         "status": "ok",
         "service": "prj17-ml",
         "model_loaded": model is not None,
-        "model_path": str(MODEL_PATH),
-        "features": FEATURES
+        "model_type": "RandomForestClassifier",
+        "model_version": "2.0.0",
+        "features": FEATURES,
+        "sample_threshold": SAMPLE_THRESHOLD,
+        "persistence_threshold": PERSISTENCE_THRESHOLD
     }
 
 
 # =========================================================
-# RADAR INPUT MODEL
+# RADAR INPUT
 # =========================================================
 
 class RadarObservation(BaseModel):
 
-    range: float = Field(
+    range_m: float = Field(
         ...,
         description="Target range in metres"
     )
 
-    az: float = Field(
+    azimuth_deg: float = Field(
         ...,
-        description="Azimuth in degrees"
+        description="Target azimuth in degrees"
     )
 
-    el: float = Field(
+    elevation_deg: float = Field(
         ...,
-        description="Elevation in degrees"
+        description="Target elevation in degrees"
     )
 
-    rcs: float = Field(
+    rcs_dbsm: float = Field(
         ...,
         description="Radar cross section in dBsm"
     )
 
-    rv: float = Field(
+    radial_velocity_mps: float = Field(
         ...,
-        description="Radial velocity in m/s"
+        description="Radial velocity in metres per second"
     )
 
-    vn: float = Field(
+    velocity_n_mps: float = Field(
         ...,
-        description="North velocity in m/s"
+        description="North velocity in metres per second"
     )
 
-    ve: float = Field(
+    velocity_e_mps: float = Field(
         ...,
-        description="East velocity in m/s"
+        description="East velocity in metres per second"
     )
 
-    vd: float = Field(
+    velocity_d_mps: float = Field(
         ...,
-        description="Down velocity in m/s"
+        description="Down velocity in metres per second"
     )
 
-    speed_mps: float = Field(
-        ...,
-        description="3D speed in m/s"
+
+# =========================================================
+# PREDICTION HELPER
+# =========================================================
+
+def make_prediction(observation: RadarObservation):
+
+    data = observation.model_dump()
+
+    row = pd.DataFrame(
+        [data],
+        columns=FEATURES
     )
 
-    horizontal_speed_mps: float = Field(
-        ...,
-        description="Horizontal speed in m/s"
+    probability = float(
+        model.predict_proba(row)[0][1]
     )
 
-    inliers: float = Field(
-        ...,
-        description="Track inlier count"
-    )
+    is_uav = probability >= SAMPLE_THRESHOLD
 
-    duration: float = Field(
-        ...,
-        description="Track duration in seconds"
-    )
+    if is_uav:
+
+        classification = "UAV"
+        confidence = probability
+
+    else:
+
+        classification = "NON-UAV"
+        confidence = 1.0 - probability
+
+    return {
+        "classification": classification,
+        "confidence": round(confidence, 4),
+        "uav_probability": round(probability, 4),
+
+        "range_m": observation.range_m,
+        "azimuth_deg": observation.azimuth_deg,
+        "elevation_deg": observation.elevation_deg,
+        "rcs_dbsm": observation.rcs_dbsm,
+        "radial_velocity_mps": observation.radial_velocity_mps
+    }
 
 
 # =========================================================
@@ -208,60 +226,7 @@ def predict(observation: RadarObservation):
             detail="ML model is not loaded"
         )
 
-    # Convert incoming JSON into DataFrame
-
-    data = observation.model_dump()
-
-    row = pd.DataFrame(
-        [data],
-        columns=FEATURES
-    )
-
-    # Get probability of UAV
-
-    probability = float(
-        model.predict_proba(row)[0][1]
-    )
-
-    # Classification threshold
-
-    is_uav = probability >= 0.50
-
-    # Confidence means confidence in the selected class
-
-    if is_uav:
-
-        confidence = probability
-
-        classification = "UAV"
-
-    else:
-
-        confidence = 1.0 - probability
-
-        classification = "NON-UAV"
-
-    return {
-
-        "classification": classification,
-
-        "confidence": round(
-            confidence,
-            4
-        ),
-
-        "uav_probability": round(
-            probability,
-            4
-        ),
-
-        "estimated_rcs": observation.rcs,
-
-        "range_m": observation.range,
-
-        "radial_velocity_mps":
-            observation.rv
-    }
+    return make_prediction(observation)
 
 
 # =========================================================
@@ -286,8 +251,6 @@ def predict_batch(
             "results": []
         }
 
-    # Convert all observations into DataFrame
-
     data = [
         observation.model_dump()
         for observation in observations
@@ -297,8 +260,6 @@ def predict_batch(
         data,
         columns=FEATURES
     )
-
-    # Predict all targets at once
 
     probabilities = model.predict_proba(
         frame
@@ -311,11 +272,9 @@ def predict_batch(
         probabilities
     ):
 
-        probability = float(
-            probability
-        )
+        probability = float(probability)
 
-        is_uav = probability >= 0.50
+        is_uav = probability >= SAMPLE_THRESHOLD
 
         if is_uav:
 
@@ -329,29 +288,24 @@ def predict_batch(
 
         results.append({
 
-            "classification":
-                classification,
+            "classification": classification,
 
-            "confidence":
-                round(
-                    confidence,
-                    4
-                ),
+            "confidence": round(
+                confidence,
+                4
+            ),
 
-            "uav_probability":
-                round(
-                    probability,
-                    4
-                ),
+            "uav_probability": round(
+                probability,
+                4
+            ),
 
-            "estimated_rcs":
-                observation.rcs,
-
-            "range_m":
-                observation.range,
-
+            "range_m": observation.range_m,
+            "azimuth_deg": observation.azimuth_deg,
+            "elevation_deg": observation.elevation_deg,
+            "rcs_dbsm": observation.rcs_dbsm,
             "radial_velocity_mps":
-                observation.rv
+                observation.radial_velocity_mps
         })
 
     return {
