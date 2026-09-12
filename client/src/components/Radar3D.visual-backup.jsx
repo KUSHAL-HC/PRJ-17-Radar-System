@@ -1185,31 +1185,31 @@ function RadarScene({
         ]}
       />
 
-      {/* Neutral cinematic illumination for the terrain */}
+      {/* Environmental illumination for the real terrain */}
       <ambientLight
-        intensity={0.58}
+        intensity={0.42}
       />
 
-      {/* Warm key light — reveals earth and rock colors */}
+      {/* Primary terrain light */}
       <directionalLight
         position={[
           6,
           14,
           5,
         ]}
-        intensity={1.05}
-        color="#fff4df"
+        intensity={0.75}
+        color="#7fffd4"
       />
 
-      {/* Cool fill — keeps shadowed mountain faces readable */}
+      {/* Soft fill light so mountain faces remain visible */}
       <directionalLight
         position={[
           -8,
-          9,
+          8,
           -6,
         ]}
-        intensity={0.48}
-        color="#b8c5d0"
+        intensity={0.32}
+        color="#3aa887"
       />
 
       <Grid

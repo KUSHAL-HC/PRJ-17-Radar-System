@@ -7,7 +7,6 @@ import {
   Text,
 } from "@react-three/drei";
 import * as THREE from "three";
-import TerrainLandscape from "./terrain/TerrainLandscape";
 
 const MAX_RANGE = 1000;
 const WORLD_RADIUS = 10;
@@ -331,6 +330,812 @@ function AltitudeContours() {
 /* =========================================================
    TERRAIN
    ========================================================= */
+function ForestAndMountains() {
+  const forest = useMemo(() => {
+    const trees = [];
+
+    /*
+     * Deterministic pseudo-random generator.
+     * This keeps the landscape stable between
+     * React renders.
+     */
+    let seed = 17;
+
+    const random = () => {
+      seed =
+        (seed * 9301 + 49297) %
+        233280;
+
+      return seed / 233280;
+    };
+
+    /*
+     * Forest occupies the central valley.
+     *
+     * Keep the immediate radar installation
+     * area relatively clear.
+     */
+    for (let i = 0; i < 420; i++) {
+      const angle =
+        random() *
+        Math.PI *
+        2;
+
+      const radius =
+        1.2 +
+        Math.sqrt(random()) *
+          6.4;
+
+      const x =
+        Math.cos(angle) *
+        radius;
+
+      const z =
+        Math.sin(angle) *
+        radius;
+
+      /*
+       * Leave a clear circular area
+       * around the radar.
+       */
+      if (
+        Math.sqrt(
+          x * x + z * z
+        ) < 1.45
+      ) {
+        continue;
+      }
+
+      const height =
+        0.45 +
+        random() *
+          0.75;
+
+      const width =
+        0.75 +
+        random() *
+          0.45;
+
+      trees.push({
+        x,
+        z,
+        height,
+        width,
+        rotation:
+          random() *
+          Math.PI *
+          2,
+      });
+    }
+
+    return trees;
+  }, []);
+
+  const mountainPositions =
+    useMemo(() => {
+      const mountains = [];
+
+      let seed = 91;
+
+      const random = () => {
+        seed =
+          (seed * 9301 +
+            49297) %
+          233280;
+
+        return seed / 233280;
+      };
+
+      /*
+       * Large mountains surrounding
+       * the forest valley.
+       */
+      for (
+        let i = 0;
+        i < 14;
+        i++
+      ) {
+        const angle =
+          (i / 14) *
+            Math.PI *
+            2 +
+          (random() -
+            0.5) *
+            0.16;
+
+        const radius =
+          9.0 +
+          random() *
+            2.0;
+
+        mountains.push({
+          x:
+            Math.cos(angle) *
+            radius,
+
+          z:
+            Math.sin(angle) *
+            radius,
+
+          height:
+            2.0 +
+            random() *
+              2.2,
+
+          radius:
+            1.5 +
+            random() *
+              1.2,
+
+          rotation:
+            random() *
+            Math.PI *
+            2,
+        });
+      }
+
+      return mountains;
+    }, []);
+
+  /*
+   * Instanced tree geometry.
+   */
+  const treeTrunk =
+    useMemo(
+      () =>
+        new THREE.CylinderGeometry(
+          0.045,
+          0.07,
+          0.55,
+          5
+        ),
+      []
+    );
+
+  const treeCrown =
+    useMemo(
+      () =>
+        new THREE.ConeGeometry(
+          0.32,
+          0.9,
+          7
+        ),
+      []
+    );
+
+  const treeTrunkMaterial =
+    useMemo(
+      () =>
+        new THREE.MeshStandardMaterial({
+          color:
+            "#17251d",
+          roughness: 1,
+          metalness: 0,
+        }),
+      []
+    );
+
+  const treeCrownMaterial =
+    useMemo(
+      () =>
+        new THREE.MeshStandardMaterial({
+          color:
+            "#0b3f2d",
+          roughness: 1,
+          metalness: 0,
+        }),
+      []
+    );
+
+  /*
+   * Mountain material.
+   */
+  const mountainMaterial =
+    useMemo(
+      () =>
+        new THREE.MeshStandardMaterial({
+          color:
+            "#102b22",
+          roughness: 1,
+          metalness: 0,
+          flatShading: true,
+        }),
+      []
+    );
+
+  /*
+   * Tree instancing.
+   */
+  const trunkMesh =
+    useMemo(() => {
+      const mesh =
+        new THREE.InstancedMesh(
+          treeTrunk,
+          treeTrunkMaterial,
+          forest.length
+        );
+
+      const dummy =
+        new THREE.Object3D();
+
+      forest.forEach(
+        (tree, index) => {
+          dummy.position.set(
+            tree.x,
+            tree.height *
+              0.275,
+            tree.z
+          );
+
+          dummy.rotation.y =
+            tree.rotation;
+
+          dummy.scale.set(
+            tree.width,
+            tree.height,
+            tree.width
+          );
+
+          dummy.updateMatrix();
+
+          mesh.setMatrixAt(
+            index,
+            dummy.matrix
+          );
+        }
+      );
+
+      mesh.instanceMatrix.needsUpdate =
+        true;
+
+      return mesh;
+    }, [
+      forest,
+      treeTrunk,
+      treeTrunkMaterial,
+    ]);
+
+  const crownMesh =
+    useMemo(() => {
+      const mesh =
+        new THREE.InstancedMesh(
+          treeCrown,
+          treeCrownMaterial,
+          forest.length
+        );
+
+      const dummy =
+        new THREE.Object3D();
+
+      forest.forEach(
+        (tree, index) => {
+          dummy.position.set(
+            tree.x,
+            tree.height *
+              0.72,
+            tree.z
+          );
+
+          dummy.rotation.y =
+            tree.rotation;
+
+          dummy.scale.set(
+            tree.width,
+            tree.height,
+            tree.width
+          );
+
+          dummy.updateMatrix();
+
+          mesh.setMatrixAt(
+            index,
+            dummy.matrix
+          );
+        }
+      );
+
+      mesh.instanceMatrix.needsUpdate =
+        true;
+
+      return mesh;
+    }, [
+      forest,
+      treeCrown,
+      treeCrownMaterial,
+    ]);
+
+  return (
+    <group>
+      {/* =====================================
+          FOREST
+          ===================================== */}
+
+      <primitive
+        object={trunkMesh}
+      />
+
+      <primitive
+        object={crownMesh}
+      />
+
+      {/* =====================================
+          MOUNTAIN RING
+          ===================================== */}
+
+      {mountainPositions.map(
+        (mountain, index) => (
+          <group
+            key={index}
+            position={[
+              mountain.x,
+              mountain.height /
+                2 -
+                0.05,
+              mountain.z,
+            ]}
+            rotation={[
+              0,
+              mountain.rotation,
+              0,
+            ]}
+          >
+            {/* Main mountain body */}
+            <mesh>
+              <coneGeometry
+                args={[
+                  mountain.radius,
+                  mountain.height,
+                  7,
+                  3,
+                ]}
+              />
+
+              <primitive
+                object={
+                  mountainMaterial
+                }
+              />
+            </mesh>
+
+            {/* Secondary ridge */}
+            <mesh
+              position={[
+                0.45,
+                0.25,
+                0.2,
+              ]}
+              scale={[
+                0.55,
+                0.7,
+                0.65,
+              ]}
+            >
+              <coneGeometry
+                args={[
+                  mountain.radius,
+                  mountain.height *
+                    0.7,
+                  6,
+                  2,
+                ]}
+              />
+
+              <primitive
+                object={
+                  mountainMaterial
+                }
+              />
+            </mesh>
+          </group>
+        )
+      )}
+    </group>
+  );
+}
+
+function Terrain() {
+  const [terrainGeometry, setTerrainGeometry] =
+    useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadTerrain = async () => {
+      const image = new Image();
+
+      image.src = "/terrain/radar-dem.png";
+
+      await new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = reject;
+      });
+
+      if (cancelled) return;
+
+      const canvas =
+        document.createElement("canvas");
+
+      canvas.width = image.width;
+      canvas.height = image.height;
+
+      const context =
+        canvas.getContext("2d", {
+          willReadFrequently: true,
+        });
+
+      context.drawImage(
+        image,
+        0,
+        0
+      );
+
+      const imageData =
+        context.getImageData(
+          0,
+          0,
+          image.width,
+          image.height
+        );
+
+      const decodeElevation = (
+        pixelIndex
+      ) => {
+        const r =
+          imageData.data[pixelIndex];
+
+        const g =
+          imageData.data[
+            pixelIndex + 1
+          ];
+
+        const b =
+          imageData.data[
+            pixelIndex + 2
+          ];
+
+        return (
+          r * 256 +
+          g +
+          b / 256 -
+          32768
+        );
+      };
+
+      /*
+       * 128 × 128 real DEM samples.
+       */
+
+      const sampleSize = 128;
+
+      const startX =
+        Math.floor(
+          (image.width -
+            sampleSize) /
+            2
+        );
+
+      const startY =
+        Math.floor(
+          (image.height -
+            sampleSize) /
+            2
+        );
+
+      const terrainSize = 24;
+
+      const geometry =
+        new THREE.PlaneGeometry(
+          terrainSize,
+          terrainSize,
+          sampleSize - 1,
+          sampleSize - 1
+        );
+
+      const positions =
+        geometry.attributes.position;
+
+      /*
+       * Radar site elevation.
+       */
+
+      const centerX =
+        startX +
+        Math.floor(
+          sampleSize / 2
+        );
+
+      const centerY =
+        startY +
+        Math.floor(
+          sampleSize / 2
+        );
+
+      const centerIndex =
+        (
+          centerY *
+            image.width +
+          centerX
+        ) *
+        4;
+
+      const radarElevation =
+        decodeElevation(
+          centerIndex
+        );
+
+      /*
+       * Vertical exaggeration.
+       *
+       * Still real DEM elevation,
+       * only visually amplified.
+       */
+
+      const verticalScale = 0.035;
+
+      const elevations =
+        new Float32Array(
+          positions.count
+        );
+
+      let minElevation =
+        Infinity;
+
+      let maxElevation =
+        -Infinity;
+
+      /*
+       * Read real elevations.
+       */
+
+      for (
+        let i = 0;
+        i < positions.count;
+        i++
+      ) {
+        const gridX =
+          i %
+          sampleSize;
+
+        const gridY =
+          Math.floor(
+            i / sampleSize
+          );
+
+        const pixelX =
+          startX + gridX;
+
+        const pixelY =
+          startY +
+          (
+            sampleSize -
+            1 -
+            gridY
+          );
+
+        const pixelIndex =
+          (
+            pixelY *
+              image.width +
+            pixelX
+          ) *
+          4;
+
+        const elevation =
+          decodeElevation(
+            pixelIndex
+          );
+
+        const relativeElevation =
+          elevation -
+          radarElevation;
+
+        elevations[i] =
+          relativeElevation;
+
+        minElevation =
+          Math.min(
+            minElevation,
+            relativeElevation
+          );
+
+        maxElevation =
+          Math.max(
+            maxElevation,
+            relativeElevation
+          );
+      }
+
+      /*
+       * Apply actual terrain height.
+       */
+
+      for (
+        let i = 0;
+        i < positions.count;
+        i++
+      ) {
+        positions.setZ(
+          i,
+          elevations[i] *
+            verticalScale
+        );
+      }
+
+      /*
+       * Create elevation-based
+       * vertex colors.
+       */
+
+      const colors =
+        new Float32Array(
+          positions.count * 3
+        );
+
+      const elevationRange =
+        Math.max(
+          1,
+          maxElevation -
+            minElevation
+        );
+
+      for (
+        let i = 0;
+        i < positions.count;
+        i++
+      ) {
+        const normalized =
+          THREE.MathUtils.clamp(
+            (
+              elevations[i] -
+              minElevation
+            ) /
+              elevationRange,
+            0,
+            1
+          );
+
+        /*
+         * Dark tactical landscape:
+         *
+         * low elevation → deep green
+         * high elevation → muted green
+         */
+
+        const r =
+          0.018 +
+          normalized * 0.035;
+
+        const g =
+          0.075 +
+          normalized * 0.105;
+
+        const b =
+          0.055 +
+          normalized * 0.055;
+
+        colors[i * 3] =
+          r;
+
+        colors[i * 3 + 1] =
+          g;
+
+        colors[i * 3 + 2] =
+          b;
+      }
+
+      geometry.setAttribute(
+        "color",
+        new THREE.Float32BufferAttribute(
+          colors,
+          3
+        )
+      );
+
+      geometry.computeVertexNormals();
+
+      geometry.userData = {
+        radarElevation,
+        minElevation,
+        maxElevation,
+      };
+
+      if (!cancelled) {
+        setTerrainGeometry(
+          geometry
+        );
+      } else {
+        geometry.dispose();
+      }
+    };
+
+    loadTerrain().catch(
+      (error) => {
+        console.error(
+          "PRJ-17 terrain loading failed:",
+          error
+        );
+      }
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!terrainGeometry) {
+    return null;
+  }
+
+  return (
+    <group>
+
+      {/* =====================================
+          REAL LANDSCAPE SURFACE
+          ===================================== */}
+
+      <mesh
+        geometry={
+          terrainGeometry
+        }
+        rotation={[
+          -Math.PI / 2,
+          0,
+          0,
+        ]}
+        position={[
+          0,
+          -0.08,
+          0,
+        ]}
+      >
+        <meshStandardMaterial
+          vertexColors
+          roughness={1}
+          metalness={0}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
+      {/* =====================================
+          SUBTLE TERRAIN STRUCTURE
+          ===================================== */}
+
+      <mesh
+        geometry={
+          terrainGeometry
+        }
+        rotation={[
+          -Math.PI / 2,
+          0,
+          0,
+        ]}
+        position={[
+          0,
+          -0.055,
+          0,
+        ]}
+        scale={[
+          1.002,
+          1.002,
+          1.002,
+        ]}
+      >
+        <meshBasicMaterial
+          color="#1c7558"
+          wireframe
+          transparent
+          opacity={0.12}
+        />
+      </mesh>
+
+    </group>
+  );
+}
+
+/* =========================================================
+   RADAR SWEEP
+   ========================================================= */
+
 function RadarSweep({
   sweepAngle,
   sweepState,
@@ -1185,31 +1990,18 @@ function RadarScene({
         ]}
       />
 
-      {/* Neutral cinematic illumination for the terrain */}
       <ambientLight
-        intensity={0.58}
+        intensity={0.2}
       />
 
-      {/* Warm key light — reveals earth and rock colors */}
       <directionalLight
         position={[
           6,
-          14,
+          12,
           5,
         ]}
-        intensity={1.05}
-        color="#fff4df"
-      />
-
-      {/* Cool fill — keeps shadowed mountain faces readable */}
-      <directionalLight
-        position={[
-          -8,
-          9,
-          -6,
-        ]}
-        intensity={0.48}
-        color="#b8c5d0"
+        intensity={0.3}
+        color="#43e9bd"
       />
 
       <Grid
@@ -1233,7 +2025,7 @@ function RadarScene({
         infiniteGrid
       />
 
-      <TerrainLandscape />
+      <Terrain />
 
       <RangeRings />
 
