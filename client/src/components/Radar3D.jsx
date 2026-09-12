@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import {
   Grid,
@@ -10,12 +10,10 @@ import * as THREE from "three";
 
 const MAX_RANGE = 1000;
 const WORLD_RADIUS = 10;
+const MAX_TRAIL_POINTS = 70;
 
 /* =========================================================
-   RADAR COORDINATE SYSTEM
-   range  -> distance from origin
-   azimuth -> horizontal direction
-   elevation -> vertical angle
+   RADAR COORDINATES → 3D WORLD
    ========================================================= */
 
 function radarToWorld(
@@ -23,7 +21,7 @@ function radarToWorld(
   azimuthDeg,
   elevationDeg = 0
 ) {
-  const safeRange = THREE.MathUtils.clamp(
+  const r = THREE.MathUtils.clamp(
     Number(range) || 0,
     0,
     MAX_RANGE
@@ -37,17 +35,38 @@ function radarToWorld(
     Number(elevationDeg) || 0
   );
 
-  const distance =
-    (safeRange / MAX_RANGE) * WORLD_RADIUS;
+  const horizontal =
+    (r / MAX_RANGE) * WORLD_RADIUS;
 
-  const horizontalDistance =
-    distance * Math.cos(elevation);
+  return new THREE.Vector3(
+    Math.sin(azimuth) *
+      horizontal *
+      Math.cos(elevation),
 
-  return [
-    horizontalDistance * Math.sin(azimuth),
-    distance * Math.sin(elevation),
-    -horizontalDistance * Math.cos(azimuth),
-  ];
+    Math.sin(elevation) * horizontal,
+
+    -Math.cos(azimuth) *
+      horizontal *
+      Math.cos(elevation)
+  );
+}
+
+/* =========================================================
+   ANGLE UTILITIES
+   ========================================================= */
+
+function normalizeAngle(angle) {
+  return ((angle % 360) + 360) % 360;
+}
+
+function angleDifference(a, b) {
+  const diff =
+    Math.abs(
+      normalizeAngle(a) -
+        normalizeAngle(b)
+    );
+
+  return Math.min(diff, 360 - diff);
 }
 
 /* =========================================================
@@ -57,175 +76,550 @@ function radarToWorld(
 function RadarDome() {
   const geometry = useMemo(() => {
     const positions = [];
+    const colors = [];
 
-    const rings = 18;
-    const segments = 128;
-
-    for (let ring = 1; ring <= rings; ring += 1) {
-      const phi =
-        (ring / rings) * (Math.PI / 2);
-
-      const radius =
-        Math.sin(phi) * WORLD_RADIUS;
-
+    for (let layer = 0; layer < 22; layer++) {
       const y =
-        Math.cos(phi) * WORLD_RADIUS;
+        (layer / 21) * WORLD_RADIUS;
 
-      for (
-        let segment = 0;
-        segment <= segments;
-        segment += 1
-      ) {
-        const theta =
-          (segment / segments) *
-          Math.PI *
-          2;
+      const radius = Math.sqrt(
+        Math.max(
+          0,
+          WORLD_RADIUS ** 2 - y ** 2
+        )
+      );
+
+      for (let i = 0; i < 160; i++) {
+        const angle =
+          (i / 160) * Math.PI * 2;
+
+        const noise =
+          0.94 +
+          Math.sin(
+            i * 2.7 + layer
+          ) *
+            0.025;
+
+        const r = radius * noise;
 
         positions.push(
-          radius * Math.cos(theta),
+          Math.cos(angle) * r,
           y,
-          radius * Math.sin(theta)
+          Math.sin(angle) * r
+        );
+
+        const brightness =
+          0.18 +
+          (layer / 21) * 0.18;
+
+        colors.push(
+          0.04 * brightness,
+          1.0 * brightness,
+          0.62 * brightness
         );
       }
     }
 
-    return new THREE.BufferGeometry().setAttribute(
+    const geo =
+      new THREE.BufferGeometry();
+
+    geo.setAttribute(
       "position",
       new THREE.Float32BufferAttribute(
         positions,
         3
       )
     );
+
+    geo.setAttribute(
+      "color",
+      new THREE.Float32BufferAttribute(
+        colors,
+        3
+      )
+    );
+
+    return geo;
   }, []);
 
   return (
-    <points geometry={geometry}>
-      <pointsMaterial
-        color="#41ffb5"
-        size={0.032}
-        transparent
-        opacity={0.38}
-        sizeAttenuation
-        depthWrite={false}
-      />
-    </points>
-  );
-}
-
-/* =========================================================
-   DOME HORIZONTAL CONTOURS
-   ========================================================= */
-
-function DomeContours() {
-  const rings = [2, 4, 6, 8, 10];
-
-  return (
     <group>
-      {rings.map((radius) => {
-        const y = Math.sqrt(
-          Math.max(
-            WORLD_RADIUS * WORLD_RADIUS -
-              radius * radius,
-            0
-          )
-        );
+      <points geometry={geometry}>
+        <pointsMaterial
+          size={0.035}
+          vertexColors
+          transparent
+          opacity={0.9}
+          depthWrite={false}
+          blending={
+            THREE.AdditiveBlending
+          }
+        />
+      </points>
 
-        return (
-          <mesh
-            key={radius}
-            position={[0, y, 0]}
-            rotation={[-Math.PI / 2, 0, 0]}
-          >
-            <torusGeometry
-              args={[
-                radius,
-                0.008,
-                4,
-                128,
-              ]}
-            />
+      <mesh>
+        <sphereGeometry
+          args={[
+            WORLD_RADIUS,
+            48,
+            24,
+            0,
+            Math.PI * 2,
+            0,
+            Math.PI / 2,
+          ]}
+        />
 
-            <meshBasicMaterial
-              color="#41ffb5"
-              transparent
-              opacity={0.18}
-              toneMapped={false}
-            />
-          </mesh>
-        );
-      })}
+        <meshBasicMaterial
+          color="#06352a"
+          transparent
+          opacity={0.19}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
     </group>
   );
 }
 
 /* =========================================================
-   RADIAL RADAR LINES
+   RANGE RINGS
    ========================================================= */
 
-function RadarRadials() {
-  const lines = [];
+function RangeRings() {
+  return (
+    <group
+      rotation={[-Math.PI / 2, 0, 0]}
+    >
+      {[2, 4, 6, 8, 10].map(
+        (radius) => (
+          <mesh key={radius}>
+            <ringGeometry
+              args={[
+                radius - 0.015,
+                radius,
+                128,
+              ]}
+            />
 
-  for (let i = 0; i < 24; i += 1) {
-    const angle =
-      (i / 24) * Math.PI * 2;
-
-    lines.push(
-      <mesh
-        key={`radial-${i}`}
-        position={[0, 0.02, 0]}
-        rotation={[0, angle, 0]}
-      >
-        <boxGeometry
-          args={[
-            0.009,
-            0.009,
-            WORLD_RADIUS * 2,
-          ]}
-        />
-
-        <meshBasicMaterial
-          color="#41ffb5"
-          transparent
-          opacity={0.19}
-          toneMapped={false}
-        />
-      </mesh>
-    );
-  }
-
-  return <group>{lines}</group>;
+            <meshBasicMaterial
+              color="#168f70"
+              transparent
+              opacity={
+                radius === 10
+                  ? 0.4
+                  : 0.22
+              }
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        )
+      )}
+    </group>
+  );
 }
 
 /* =========================================================
-   GROUND RANGE RINGS
+   RADIAL LINES
    ========================================================= */
 
-function GroundRings() {
-  const rings = [2, 4, 6, 8, 10];
+function Radials() {
+  const geometry = useMemo(() => {
+    const points = [];
+
+    for (let i = 0; i < 36; i++) {
+      const angle =
+        (i / 36) * Math.PI * 2;
+
+      points.push(
+        new THREE.Vector3(
+          0,
+          0.025,
+          0
+        ),
+
+        new THREE.Vector3(
+          Math.sin(angle) *
+            WORLD_RADIUS,
+          0.025,
+          Math.cos(angle) *
+            WORLD_RADIUS
+        )
+      );
+    }
+
+    return new THREE.BufferGeometry().setFromPoints(
+      points
+    );
+  }, []);
 
   return (
-    <group rotation={[-Math.PI / 2, 0, 0]}>
-      {rings.map((radius) => (
-        <mesh key={radius}>
-          <ringGeometry
-            args={[
-              radius - 0.008,
-              radius,
-              160,
-            ]}
-          />
+    <lineSegments geometry={geometry}>
+      <lineBasicMaterial
+        color="#0e765c"
+        transparent
+        opacity={0.3}
+      />
+    </lineSegments>
+  );
+}
 
-          <meshBasicMaterial
-            color="#41ffb5"
-            transparent
-            opacity={
-              radius === 10 ? 0.24 : 0.12
-            }
-            side={THREE.DoubleSide}
-            toneMapped={false}
-          />
-        </mesh>
-      ))}
+/* =========================================================
+   ALTITUDE CONTOURS
+   ========================================================= */
+
+function AltitudeContours() {
+  const contours = [];
+
+  for (let i = 1; i <= 7; i++) {
+    const y =
+      (i / 8) * WORLD_RADIUS;
+
+    const radius = Math.sqrt(
+      Math.max(
+        0,
+        WORLD_RADIUS ** 2 - y ** 2
+      )
+    );
+
+    contours.push({
+      y,
+      radius,
+    });
+  }
+
+  return (
+    <group>
+      {contours.map(
+        (item, index) => (
+          <mesh
+            key={index}
+            position={[
+              0,
+              item.y,
+              0,
+            ]}
+            rotation={[
+              -Math.PI / 2,
+              0,
+              0,
+            ]}
+          >
+            <ringGeometry
+              args={[
+                item.radius * 0.985,
+                item.radius,
+                96,
+              ]}
+            />
+
+            <meshBasicMaterial
+              color="#1db58b"
+              transparent
+              opacity={0.065}
+              side={THREE.DoubleSide}
+              depthWrite={false}
+            />
+          </mesh>
+        )
+      )}
+    </group>
+  );
+}
+
+/* =========================================================
+   TERRAIN
+   ========================================================= */
+
+function Terrain() {
+  const [terrainGeometry, setTerrainGeometry] =
+    useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadTerrain = async () => {
+      const image = new Image();
+
+      image.src = "/terrain/radar-dem.png";
+
+      await new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = reject;
+      });
+
+      if (cancelled) return;
+
+      const canvas =
+        document.createElement("canvas");
+
+      canvas.width = image.width;
+      canvas.height = image.height;
+
+      const context =
+        canvas.getContext("2d", {
+          willReadFrequently: true,
+        });
+
+      context.drawImage(
+        image,
+        0,
+        0
+      );
+
+      const imageData =
+        context.getImageData(
+          0,
+          0,
+          image.width,
+          image.height
+        );
+
+      /*
+       * AWS Terrarium elevation encoding:
+       *
+       * elevation =
+       *   (R * 256 + G + B / 256) - 32768
+       */
+
+      const decodeElevation = (
+        pixelIndex
+      ) => {
+        const r =
+          imageData.data[
+            pixelIndex
+          ];
+
+        const g =
+          imageData.data[
+            pixelIndex + 1
+          ];
+
+        const b =
+          imageData.data[
+            pixelIndex + 2
+          ];
+
+        return (
+          r * 256 +
+          g +
+          b / 256 -
+          32768
+        );
+      };
+
+      /*
+       * We use the center portion of
+       * the DEM around the radar.
+       *
+       * 64 x 64 samples gives us
+       * enough detail while keeping
+       * the Three.js scene lightweight.
+       */
+
+      const sampleSize = 64;
+
+      const startX =
+        Math.floor(
+          (image.width -
+            sampleSize) /
+            2
+        );
+
+      const startY =
+        Math.floor(
+          (image.height -
+            sampleSize) /
+            2
+        );
+
+      const segments =
+        sampleSize - 1;
+
+      const terrainSize = 24;
+
+      const geometry =
+        new THREE.PlaneGeometry(
+          terrainSize,
+          terrainSize,
+          segments,
+          segments
+        );
+
+      const positions =
+        geometry.attributes.position;
+
+      /*
+       * Determine the elevation
+       * directly underneath the radar.
+       */
+
+      const centerPixelX =
+        startX +
+        Math.floor(
+          sampleSize / 2
+        );
+
+      const centerPixelY =
+        startY +
+        Math.floor(
+          sampleSize / 2
+        );
+
+      const centerIndex =
+        (
+          centerPixelY *
+            image.width +
+          centerPixelX
+        ) *
+        4;
+
+      const radarElevation =
+        decodeElevation(
+          centerIndex
+        );
+
+      /*
+       * Vertical exaggeration.
+       *
+       * 0.006 keeps the terrain
+       * believable at our radar scale.
+       */
+
+      const verticalScale =
+        0.006;
+
+      for (
+        let i = 0;
+        i < positions.count;
+        i++
+      ) {
+        const gridX =
+          i %
+          sampleSize;
+
+        const gridY =
+          Math.floor(
+            i / sampleSize
+          );
+
+        const pixelX =
+          startX + gridX;
+
+        const pixelY =
+          startY +
+          (sampleSize -
+            1 -
+            gridY);
+
+        const pixelIndex =
+          (
+            pixelY *
+              image.width +
+            pixelX
+          ) *
+          4;
+
+        const elevation =
+          decodeElevation(
+            pixelIndex
+          );
+
+        /*
+         * Make radar site = 0.
+         * Everything else is relative
+         * to the radar's actual elevation.
+         */
+
+        const relativeElevation =
+          elevation -
+          radarElevation;
+
+        positions.setZ(
+          i,
+          relativeElevation *
+            verticalScale
+        );
+      }
+
+      geometry.computeVertexNormals();
+
+      if (!cancelled) {
+        setTerrainGeometry(
+          geometry
+        );
+      } else {
+        geometry.dispose();
+      }
+    };
+
+    loadTerrain().catch(
+      (error) => {
+        console.error(
+          "PRJ-17 terrain loading failed:",
+          error
+        );
+      }
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!terrainGeometry) {
+    return null;
+  }
+
+  return (
+    <group>
+      {/* Actual DEM terrain */}
+      <mesh
+        geometry={
+          terrainGeometry
+        }
+        rotation={[
+          -Math.PI / 2,
+          0,
+          0,
+        ]}
+        position={[
+          0,
+          -0.08,
+          0,
+        ]}
+      >
+        <meshBasicMaterial
+          color="#102f25"
+          wireframe
+          transparent
+          opacity={0.7}
+        />
+      </mesh>
+
+      {/* Subtle solid terrain surface */}
+      <mesh
+        geometry={
+          terrainGeometry
+        }
+        rotation={[
+          -Math.PI / 2,
+          0,
+          0,
+        ]}
+        position={[
+          0,
+          -0.08,
+          0,
+        ]}
+      >
+        <meshBasicMaterial
+          color="#06140f"
+          transparent
+          opacity={0.72}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
     </group>
   );
 }
@@ -234,87 +628,143 @@ function GroundRings() {
    RADAR SWEEP
    ========================================================= */
 
-function RadarSweep() {
+function RadarSweep({
+  sweepAngle,
+  sweepState,
+}) {
   const sweepRef = useRef();
 
   useFrame((_, delta) => {
-    if (!sweepRef.current) return;
+    if (!sweepRef.current) {
+      return;
+    }
 
-    sweepRef.current.rotation.y -=
-      delta * 0.72;
+    sweepRef.current.rotation.y +=
+      delta * 0.75;
+
+    const worldRotation =
+      sweepRef.current.rotation.y;
+
+    const degrees =
+      THREE.MathUtils.radToDeg(
+        worldRotation
+      );
+
+    sweepState.current =
+      normalizeAngle(
+        -degrees
+      );
   });
 
   return (
     <group
       ref={sweepRef}
-      position={[0, 0.09, 0]}
+      rotation={[
+        0,
+        -THREE.MathUtils.degToRad(
+          Number(sweepAngle) || 0
+        ),
+        0,
+      ]}
+      position={[
+        0,
+        0.12,
+        0,
+      ]}
     >
-      {/* Main illuminated sector */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+      {/* Wide detection wedge */}
+      <mesh
+        rotation={[
+          -Math.PI / 2,
+          0,
+          0,
+        ]}
+      >
         <circleGeometry
           args={[
-            WORLD_RADIUS,
-            48,
+            10,
+            32,
             0,
-            Math.PI / 7,
+            Math.PI / 9,
           ]}
         />
 
         <meshBasicMaterial
-          color="#41ffb5"
+          color="#2affbd"
           transparent
-          opacity={0.10}
+          opacity={0.055}
           side={THREE.DoubleSide}
-          blending={THREE.AdditiveBlending}
           depthWrite={false}
-          toneMapped={false}
+          blending={
+            THREE.AdditiveBlending
+          }
         />
       </mesh>
 
-      {/* Bright leading edge */}
+      {/* Secondary fading wedge */}
+      <mesh
+        rotation={[
+          -Math.PI / 2,
+          0,
+          0,
+        ]}
+      >
+        <circleGeometry
+          args={[
+            10,
+            32,
+            0,
+            Math.PI / 20,
+          ]}
+        />
+
+        <meshBasicMaterial
+          color="#7affdc"
+          transparent
+          opacity={0.08}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+          blending={
+            THREE.AdditiveBlending
+          }
+        />
+      </mesh>
+
+      {/* Main sweep line */}
       <mesh
         position={[
           0,
-          0.01,
-          -WORLD_RADIUS / 2,
+          0,
+          -5,
         ]}
       >
         <boxGeometry
           args={[
-            0.028,
-            0.035,
-            WORLD_RADIUS,
+            0.025,
+            0.025,
+            10,
           ]}
         />
 
         <meshBasicMaterial
-          color="#a8ffe5"
+          color="#8affdf"
           transparent
           opacity={0.95}
-          blending={THREE.AdditiveBlending}
-          toneMapped={false}
         />
       </mesh>
 
-      {/* Inner sweep glow */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry
+      {/* Sweep origin glow */}
+      <mesh>
+        <sphereGeometry
           args={[
-            6,
-            32,
-            0,
-            Math.PI / 7,
+            0.07,
+            12,
+            12,
           ]}
         />
 
         <meshBasicMaterial
-          color="#41ffb5"
-          transparent
-          opacity={0.07}
-          side={THREE.DoubleSide}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-          toneMapped={false}
+          color="#9ffff0"
         />
       </mesh>
     </group>
@@ -328,327 +778,566 @@ function RadarSweep() {
 function RadarOrigin() {
   const ref = useRef();
 
-  useFrame((state) => {
-    if (!ref.current) return;
+  useFrame(({ clock }) => {
+    if (!ref.current) {
+      return;
+    }
 
-    const pulse =
+    const scale =
       1 +
       Math.sin(
-        state.clock.elapsedTime * 3
+        clock.elapsedTime * 3
       ) *
-        0.18;
+        0.2;
 
-    ref.current.scale.setScalar(pulse);
+    ref.current.scale.set(
+      scale,
+      scale,
+      scale
+    );
   });
 
   return (
-    <group position={[0, 0.18, 0]}>
+    <group
+      position={[
+        0,
+        0.08,
+        0,
+      ]}
+    >
       <mesh ref={ref}>
         <sphereGeometry
-          args={[0.11, 20, 20]}
+          args={[
+            0.12,
+            20,
+            20,
+          ]}
         />
 
         <meshBasicMaterial
-          color="#d9fff2"
-          toneMapped={false}
+          color="#54ffd1"
         />
       </mesh>
 
-      <mesh>
-        <ringGeometry
-          args={[0.18, 0.205, 32]}
-        />
-
-        <meshBasicMaterial
-          color="#41ffb5"
-          transparent
-          opacity={0.7}
-          side={THREE.DoubleSide}
-          blending={THREE.AdditiveBlending}
-          toneMapped={false}
-        />
-      </mesh>
+      <pointLight
+        color="#28ffbd"
+        intensity={1.1}
+        distance={3}
+      />
     </group>
   );
 }
 
 /* =========================================================
-   TARGET
+   TARGET TRAIL
+   ========================================================= */
+
+function TargetTrail({
+  color,
+  trailRef,
+  lineRef,
+}) {
+  const geometry =
+    useMemo(() => {
+      const positions =
+        new Float32Array(
+          MAX_TRAIL_POINTS * 3
+        );
+
+      const geo =
+        new THREE.BufferGeometry();
+
+      geo.setAttribute(
+        "position",
+        new THREE.BufferAttribute(
+          positions,
+          3
+        )
+      );
+
+      geo.setDrawRange(
+        0,
+        0
+      );
+
+      return geo;
+    }, []);
+
+  useEffect(() => {
+    lineRef.current =
+      geometry;
+
+    return () => {
+      geometry.dispose();
+    };
+  }, [geometry, lineRef]);
+
+  useFrame(() => {
+    if (!geometry) {
+      return;
+    }
+
+    const points =
+      trailRef.current;
+
+    if (
+      !points ||
+      points.length < 2
+    ) {
+      geometry.setDrawRange(
+        0,
+        0
+      );
+
+      return;
+    }
+
+    const attribute =
+      geometry.attributes
+        .position;
+
+    const max =
+      Math.min(
+        points.length,
+        MAX_TRAIL_POINTS
+      );
+
+    for (
+      let i = 0;
+      i < max;
+      i++
+    ) {
+      const point =
+        points[
+          points.length -
+            max +
+            i
+        ];
+
+      attribute.setXYZ(
+        i,
+        point.x,
+        point.y,
+        point.z
+      );
+    }
+
+    attribute.needsUpdate =
+      true;
+
+    geometry.setDrawRange(
+      0,
+      max
+    );
+  });
+
+  return (
+    <line
+      geometry={geometry}
+    >
+      <lineBasicMaterial
+        color={color}
+        transparent
+        opacity={0.28}
+        depthWrite={false}
+        blending={
+          THREE.AdditiveBlending
+        }
+      />
+    </line>
+  );
+}
+
+/* =========================================================
+   INDIVIDUAL TARGET
    ========================================================= */
 
 function Target({
   target,
   selected,
-  onSelect,
+  sweepState,
 }) {
-  const groupRef = useRef();
-  const pulseRef = useRef();
+  const group = useRef();
+  const pulse = useRef();
+  const detectionRing = useRef();
 
-  const position = useMemo(
-    () =>
+  const currentPosition =
+    useRef(
       radarToWorld(
         target.range_m,
         target.azimuth_deg,
         target.elevation_deg
-      ),
-    [
-      target.range_m,
-      target.azimuth_deg,
-      target.elevation_deg,
-    ]
+      )
+    );
+
+  const desiredPosition =
+    useMemo(
+      () =>
+        radarToWorld(
+          target.range_m,
+          target.azimuth_deg,
+          target.elevation_deg
+        ),
+      [
+        target.range_m,
+        target.azimuth_deg,
+        target.elevation_deg,
+      ]
+    );
+
+  const trailRef =
+    useRef([]);
+
+  const trailLineRef =
+    useRef(null);
+
+  const lastSweepRef =
+    useRef(-999);
+
+  const threat = String(
+    target.threat_level ||
+      target.threat ||
+      ""
+  ).toUpperCase();
+
+  const high =
+    threat === "HIGH";
+
+  const medium =
+    threat === "MEDIUM";
+
+  const color = high
+    ? "#ff5050"
+    : medium
+    ? "#ffd166"
+    : "#39ffc2";
+
+  const confidence = Number(
+    target.uav_probability ??
+      target.confidence ??
+      0
   );
 
-  const isUav =
-    target.classification === "UAV";
+  useFrame(
+    ({ clock }, delta) => {
+      if (!group.current) {
+        return;
+      }
 
-  const probability =
-    Number(target.uav_probability) || 0;
+      /* -----------------------------------------
+         Smooth target movement
+         ----------------------------------------- */
 
-  const threat =
-    probability >= 0.8
-      ? "HIGH"
-      : probability >= 0.5
-        ? "MEDIUM"
-        : "LOW";
+      const smoothing =
+        1 -
+        Math.exp(
+          -delta * 5.5
+        );
 
-  const targetColor = selected
-    ? "#ffffff"
-    : threat === "HIGH"
-      ? "#ff5f56"
-      : isUav
-        ? "#41ffb5"
-        : "#ffb84d";
-
-  const altitude = Math.abs(
-    position[1]
-  );
-
-  useFrame((state) => {
-    const time =
-      state.clock.elapsedTime;
-
-    if (groupRef.current) {
-      const pulse =
-        1 +
-        Math.sin(time * 4.5) *
-          0.10;
-
-      groupRef.current.scale.setScalar(
-        selected ? 1.3 * pulse : pulse
+      currentPosition.current.lerp(
+        desiredPosition,
+        smoothing
       );
-    }
 
-    if (pulseRef.current) {
-      pulseRef.current.rotation.z =
-        time * 0.8;
+      group.current.position.copy(
+        currentPosition.current
+      );
 
-      pulseRef.current.material.opacity =
-        0.35 +
-        Math.sin(time * 4.5) *
-          0.18;
+      /* -----------------------------------------
+         Store target trail
+         ----------------------------------------- */
+
+      const trail =
+        trailRef.current;
+
+      const last =
+        trail[
+          trail.length - 1
+        ];
+
+      if (
+        !last ||
+        last.distanceTo(
+          currentPosition.current
+        ) > 0.015
+      ) {
+        trail.push(
+          currentPosition.current.clone()
+        );
+
+        if (
+          trail.length >
+          MAX_TRAIL_POINTS
+        ) {
+          trail.shift();
+        }
+      }
+
+      /* -----------------------------------------
+         Target pulse
+         ----------------------------------------- */
+
+      const pulseWave =
+        Math.sin(
+          clock.elapsedTime * 5
+        );
+
+      if (pulse.current) {
+        const base =
+          selected
+            ? 1.28
+            : 1;
+
+        const scale =
+          base +
+          pulseWave * 0.13;
+
+        pulse.current.scale.setScalar(
+          scale
+        );
+      }
+
+      /* -----------------------------------------
+         Sweep detection
+         ----------------------------------------- */
+
+      const targetAzimuth =
+        normalizeAngle(
+          Number(
+            target.azimuth_deg
+          ) || 0
+        );
+
+      const sweepAngleNow =
+        normalizeAngle(
+          sweepState.current
+        );
+
+      const difference =
+        angleDifference(
+          targetAzimuth,
+          sweepAngleNow
+        );
+
+      const sweepHit =
+        difference < 7;
+
+      if (
+        sweepHit &&
+        Math.abs(
+          sweepAngleNow -
+            lastSweepRef.current
+        ) > 20
+      ) {
+        lastSweepRef.current =
+          sweepAngleNow;
+      }
+
+      if (
+        detectionRing.current
+      ) {
+        const targetScale =
+          sweepHit
+            ? 1.45
+            : selected
+            ? 1.15
+            : 1;
+
+        detectionRing.current.scale.lerp(
+          new THREE.Vector3(
+            targetScale,
+            targetScale,
+            targetScale
+          ),
+          0.16
+        );
+
+        detectionRing.current.material.opacity =
+          sweepHit
+            ? 1
+            : selected
+            ? 0.8
+            : 0.48;
+      }
     }
-  });
+  );
 
   return (
     <group>
-      {/* Altitude / elevation stem */}
-      {altitude > 0.08 && (
-        <mesh
-          position={[
-            position[0],
-            position[1] / 2,
-            position[2],
-          ]}
-        >
-          <cylinderGeometry
-            args={[
-              0.006,
-              0.006,
-              altitude,
-              6,
-            ]}
+      {/* ---------------------------------------
+          Target trail
+      --------------------------------------- */}
+
+      <TargetTrail
+        color={color}
+        trailRef={trailRef}
+        lineRef={trailLineRef}
+      />
+
+      {/* ---------------------------------------
+          Target body
+      --------------------------------------- */}
+
+      <group ref={group}>
+        {/* Altitude stem */}
+        <line>
+          <bufferGeometry
+            attach="geometry"
+            onUpdate={(geometry) => {
+              geometry.setFromPoints([
+                new THREE.Vector3(
+                  0,
+                  -currentPosition.current.y,
+                  0
+                ),
+                new THREE.Vector3(
+                  0,
+                  0,
+                  0
+                ),
+              ]);
+            }}
           />
 
-          <meshBasicMaterial
-            color={targetColor}
+          <lineBasicMaterial
+            color={color}
             transparent
-            opacity={
-              selected ? 0.48 : 0.18
-            }
-            toneMapped={false}
+            opacity={0.5}
           />
-        </mesh>
-      )}
+        </line>
 
-      {/* Target */}
-      <group
-        ref={groupRef}
-        position={position}
-        onClick={(event) => {
-          event.stopPropagation();
-          onSelect(target.track_id);
-        }}
-      >
-        {/* Main contact */}
-        <mesh>
+        {/* Target core */}
+        <mesh ref={pulse}>
           <octahedronGeometry
             args={[
-              selected ? 0.16 : 0.105,
+              selected
+                ? 0.27
+                : 0.17,
               1,
             ]}
           />
 
           <meshBasicMaterial
-            color={targetColor}
+            color={color}
+            wireframe={!selected}
             toneMapped={false}
           />
         </mesh>
 
-        {/* Horizontal target wings */}
-        {isUav && (
-          <>
-            <mesh
-              position={[0, 0, 0]}
-              rotation={[
-                0,
-                0,
-                Math.PI / 2,
-              ]}
-            >
-              <boxGeometry
-                args={[0.025, 0.34, 0.055]}
-              />
-
-              <meshBasicMaterial
-                color={targetColor}
-                toneMapped={false}
-              />
-            </mesh>
-
-            <mesh
-              position={[0, 0, 0]}
-              rotation={[
-                0,
-                0,
-                Math.PI / 2,
-              ]}
-            >
-              <coneGeometry
-                args={[
-                  0.08,
-                  0.32,
-                  4,
-                ]}
-              />
-
-              <meshBasicMaterial
-                color={targetColor}
-                transparent
-                opacity={0.82}
-                toneMapped={false}
-              />
-            </mesh>
-          </>
-        )}
-
-        {/* Contact pulse */}
+        {/* Detection ring */}
         <mesh
-          ref={pulseRef}
-          rotation={[-Math.PI / 2, 0, 0]}
+          ref={detectionRing}
+          rotation={[
+            -Math.PI / 2,
+            0,
+            0,
+          ]}
         >
           <ringGeometry
             args={[
-              selected ? 0.25 : 0.17,
-              selected ? 0.285 : 0.20,
+              selected
+                ? 0.42
+                : 0.23,
+              selected
+                ? 0.45
+                : 0.26,
               32,
             ]}
           />
 
           <meshBasicMaterial
-            color={targetColor}
+            color={color}
             transparent
-            opacity={0.55}
+            opacity={
+              selected
+                ? 0.8
+                : 0.48
+            }
             side={THREE.DoubleSide}
-            blending={THREE.AdditiveBlending}
-            toneMapped={false}
           />
         </mesh>
 
-        {/* Selected lock rings */}
+        {/* Selected tracking halo */}
         {selected && (
           <>
-            <mesh
-              rotation={[-Math.PI / 2, 0, 0]}
-            >
-              <ringGeometry
+            <mesh>
+              <torusGeometry
                 args={[
-                  0.36,
-                  0.375,
-                  32,
+                  0.55,
+                  0.018,
+                  8,
+                  48,
                 ]}
               />
 
               <meshBasicMaterial
                 color="#ffffff"
                 transparent
-                opacity={0.8}
-                side={THREE.DoubleSide}
-                toneMapped={false}
+                opacity={0.85}
               />
             </mesh>
 
-            <mesh
-              rotation={[0, 0, 0]}
-            >
-              <ringGeometry
+            <mesh>
+              <sphereGeometry
                 args={[
-                  0.36,
-                  0.375,
-                  32,
+                  0.38,
+                  16,
+                  16,
                 ]}
               />
 
               <meshBasicMaterial
-                color="#ffffff"
+                color={color}
                 transparent
-                opacity={0.35}
+                opacity={0.035}
                 side={THREE.DoubleSide}
-                toneMapped={false}
+                depthWrite={false}
+                blending={
+                  THREE.AdditiveBlending
+                }
               />
             </mesh>
-
-            <Text
-              position={[
-                0.28,
-                0.27,
-                0,
-              ]}
-              fontSize={0.21}
-              color="#e1fff4"
-              anchorX="left"
-              anchorY="middle"
-              outlineWidth={0.01}
-              outlineColor="#020706"
-            >
-              {`T-${target.track_id}`}
-            </Text>
-
-            <Text
-              position={[
-                0.28,
-                0.04,
-                0,
-              ]}
-              fontSize={0.105}
-              color="#41ffb5"
-              anchorX="left"
-              anchorY="middle"
-            >
-              {`${Math.round(
-                probability * 100
-              )}% UAV`}
-            </Text>
           </>
+        )}
+
+        {/* Track label */}
+        <Text
+          position={[
+            0.3,
+            0.24,
+            0,
+          ]}
+          fontSize={
+            selected
+              ? 0.22
+              : 0.16
+          }
+          color={color}
+          anchorX="left"
+          anchorY="middle"
+          outlineWidth={0.015}
+          outlineColor="#00110c"
+        >
+          {target.track_id ||
+            "UNKNOWN"}
+        </Text>
+
+        {/* Classification */}
+        {selected && (
+          <Text
+            position={[
+              0.3,
+              -0.01,
+              0,
+            ]}
+            fontSize={0.12}
+            color="#b9fff0"
+            anchorX="left"
+          >
+            {`UAV ${(
+              confidence * 100
+            ).toFixed(0)}%`}
+          </Text>
         )}
       </group>
     </group>
@@ -656,27 +1345,39 @@ function Target({
 }
 
 /* =========================================================
-   TARGET LAYER
+   TARGET COLLECTION
    ========================================================= */
 
 function Targets({
   targets,
   selectedTrack,
-  onSelect,
+  sweepState,
 }) {
   return (
     <group>
-      {targets.map((target) => (
-        <Target
-          key={target.track_id}
-          target={target}
-          selected={
-            target.track_id ===
-            selectedTrack
-          }
-          onSelect={onSelect}
-        />
-      ))}
+      {targets.map(
+        (target, index) => (
+          <Target
+            key={
+              target.track_id ||
+              target.id ||
+              index
+            }
+            target={target}
+            selected={
+              String(
+                target.track_id
+              ) ===
+              String(
+                selectedTrack
+              )
+            }
+            sweepState={
+              sweepState
+            }
+          />
+        )
+      )}
     </group>
   );
 }
@@ -687,29 +1388,27 @@ function Targets({
 
 function CardinalLabels() {
   return (
-    <group>
+    <>
       <Text
         position={[
           0,
-          0.28,
-          -10.7,
+          0.15,
+          -10.6,
         ]}
-        fontSize={0.3}
-        color="#41ffb5"
-        anchorX="center"
+        fontSize={0.23}
+        color="#4dffcf"
       >
         N
       </Text>
 
       <Text
         position={[
-          10.7,
-          0.28,
+          10.6,
+          0.15,
           0,
         ]}
-        fontSize={0.3}
-        color="#41ffb5"
-        anchorX="center"
+        fontSize={0.23}
+        color="#4dffcf"
       >
         E
       </Text>
@@ -717,249 +1416,150 @@ function CardinalLabels() {
       <Text
         position={[
           0,
-          0.28,
-          10.7,
+          0.15,
+          10.6,
         ]}
-        fontSize={0.3}
-        color="#41ffb5"
-        anchorX="center"
+        fontSize={0.23}
+        color="#4dffcf"
       >
         S
       </Text>
 
       <Text
         position={[
-          -10.7,
-          0.28,
+          -10.6,
+          0.15,
           0,
         ]}
-        fontSize={0.3}
-        color="#41ffb5"
-        anchorX="center"
+        fontSize={0.23}
+        color="#4dffcf"
       >
         W
       </Text>
-    </group>
+    </>
   );
 }
 
 /* =========================================================
-   TERRAIN
-   ========================================================= */
-
-function Terrain() {
-  const geometry = useMemo(() => {
-    const size = 20;
-    const segments = 100;
-
-    const geo =
-      new THREE.PlaneGeometry(
-        size,
-        size,
-        segments,
-        segments
-      );
-
-    const position =
-      geo.attributes.position;
-
-    for (
-      let i = 0;
-      i < position.count;
-      i += 1
-    ) {
-      const x = position.getX(i);
-      const y = position.getY(i);
-
-      const distance = Math.sqrt(
-        x * x + y * y
-      );
-
-      const broadTerrain =
-        Math.sin(x * 0.55) * 0.06 +
-        Math.cos(y * 0.45) * 0.05;
-
-      const detail =
-        Math.sin(
-          (x + y) * 1.2
-        ) * 0.018 +
-        Math.cos(
-          (x - y) * 0.8
-        ) * 0.014;
-
-      const height =
-        broadTerrain + detail;
-
-      position.setZ(
-        i,
-        distance < 10
-          ? height
-          : 0
-      );
-    }
-
-    geo.computeVertexNormals();
-
-    return geo;
-  }, []);
-
-  return (
-    <mesh
-      geometry={geometry}
-      rotation={[
-        -Math.PI / 2,
-        0,
-        0,
-      ]}
-      position={[0, -0.05, 0]}
-    >
-      <meshBasicMaterial
-        color="#0a211a"
-        wireframe
-        transparent
-        opacity={0.42}
-      />
-    </mesh>
-  );
-}
-
-/* =========================================================
-   ATMOSPHERIC VERTICAL AXIS
-   ========================================================= */
-
-function AltitudeAxis() {
-  return (
-    <group>
-      {[2, 4, 6, 8].map((height) => (
-        <mesh
-          key={height}
-          position={[
-            0,
-            height,
-            0,
-          ]}
-        >
-          <torusGeometry
-            args={[
-              Math.max(
-                1,
-                height * 0.75
-              ),
-              0.006,
-              4,
-              96,
-            ]}
-          />
-
-          <meshBasicMaterial
-            color="#41ffb5"
-            transparent
-            opacity={0.055}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-/* =========================================================
-   MAIN SCENE
+   MAIN RADAR SCENE
    ========================================================= */
 
 function RadarScene({
   targets,
   selectedTrack,
-  onSelect,
+  sweepAngle,
 }) {
+  const sweepState =
+    useRef(
+      Number(sweepAngle) || 0
+    );
+
   return (
     <>
       <PerspectiveCamera
         makeDefault
         position={[
-          13,
+          14,
           11,
-          15,
+          16,
         ]}
-        fov={46}
+        fov={48}
       />
 
       <color
         attach="background"
-        args={["#010706"]}
+        args={[
+          "#010806",
+        ]}
       />
 
       <fog
         attach="fog"
         args={[
-          "#010706",
-          17,
-          36,
+          "#010806",
+          14,
+          32,
         ]}
       />
 
-      <ambientLight intensity={0.32} />
+      <ambientLight
+        intensity={0.2}
+      />
 
-      <group
+      <directionalLight
         position={[
-          0,
-          -0.65,
-          0,
+          6,
+          12,
+          5,
         ]}
-      >
-        <Terrain />
-
-        <GroundRings />
-
-        <RadarDome />
-
-        <DomeContours />
-
-        <RadarRadials />
-
-        <AltitudeAxis />
-
-        <RadarSweep />
-
-        <RadarOrigin />
-
-        <CardinalLabels />
-
-        <Targets
-          targets={targets}
-          selectedTrack={selectedTrack}
-          onSelect={onSelect}
-        />
-      </group>
+        intensity={0.3}
+        color="#43e9bd"
+      />
 
       <Grid
         position={[
           0,
-          -0.82,
+          -0.11,
           0,
         ]}
-        args={[32, 32]}
+        args={[
+          40,
+          40,
+        ]}
         cellSize={1}
-        cellThickness={0.35}
-        cellColor="#123e34"
+        cellThickness={0.45}
+        cellColor="#0a4d3c"
         sectionSize={5}
-        sectionThickness={0.65}
-        sectionColor="#23725d"
-        fadeDistance={29}
-        fadeStrength={1.15}
+        sectionThickness={0.8}
+        sectionColor="#11745a"
+        fadeDistance={35}
+        fadeStrength={1.4}
         infiniteGrid
       />
 
+      <Terrain />
+
+      <RangeRings />
+
+      <Radials />
+
+      <RadarDome />
+
+      <AltitudeContours />
+
+      <RadarSweep
+        sweepAngle={
+          sweepAngle
+        }
+        sweepState={
+          sweepState
+        }
+      />
+
+      <RadarOrigin />
+
+      <Targets
+        targets={targets}
+        selectedTrack={
+          selectedTrack
+        }
+        sweepState={
+          sweepState
+        }
+      />
+
+      <CardinalLabels />
+
       <OrbitControls
         enablePan={false}
-        enableZoom={true}
-        minDistance={11}
-        maxDistance={26}
-        minPolarAngle={0.65}
-        maxPolarAngle={1.48}
+        enableZoom
+        minDistance={12}
+        maxDistance={25}
+        minPolarAngle={0.55}
+        maxPolarAngle={1.35}
         target={[
           0,
-          1.7,
+          2.8,
           0,
         ]}
       />
@@ -968,24 +1568,27 @@ function RadarScene({
 }
 
 /* =========================================================
-   PUBLIC COMPONENT
+   PUBLIC RADAR COMPONENT
    ========================================================= */
 
 export default function Radar3D({
   targets = [],
   selectedTrack = null,
-  onSelect = () => {},
+  sweepAngle = 0,
 }) {
   return (
     <div
       style={{
-        position: "absolute",
+        position:
+          "absolute",
         inset: 0,
-        overflow: "hidden",
       }}
     >
       <Canvas
-        dpr={[1, 1.75]}
+        dpr={[
+          1,
+          1.7,
+        ]}
         gl={{
           antialias: true,
           alpha: false,
@@ -994,9 +1597,15 @@ export default function Radar3D({
         }}
       >
         <RadarScene
-          targets={targets}
-          selectedTrack={selectedTrack}
-          onSelect={onSelect}
+          targets={
+            targets
+          }
+          selectedTrack={
+            selectedTrack
+          }
+          sweepAngle={
+            sweepAngle
+          }
         />
       </Canvas>
     </div>

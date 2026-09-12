@@ -78,6 +78,8 @@ function App() {
       console.error("Radar error:", data);
     };
 
+    if (socket.connected) handleConnect();
+
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on("radar:status", handleStatus);
