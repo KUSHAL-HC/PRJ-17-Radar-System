@@ -1,4 +1,4 @@
-import { useEffect, useMemo , useRef, useState } from "react";
+import { useEffect, useMemo , useState } from "react";
 import socket from "./services/socket";
 import "./App.css";
 import Radar3D from "./components/Radar3D";
@@ -16,7 +16,217 @@ function formatNumber(value, digits = 1) {
   return Number.isFinite(number) ? number.toFixed(digits) : "--";
 }
 
-function App() {
+function Sparkline({
+  data = [],
+  min = null,
+  max = null,
+  className = "",
+}) {
+  const width = 300;
+  const height = 70;
+  const padding = 4;
+
+  if (!data.length) {
+    return (
+      <div className={`sparkline-empty ${className}`}>
+        <span>WAITING FOR TELEMETRY</span>
+      </div>
+    );
+  }
+
+  const numeric = data.map(Number).filter(Number.isFinite);
+
+  if (!numeric.length) {
+    return (
+      <div className={`sparkline-empty ${className}`}>
+        <span>NO VALID DATA</span>
+      </div>
+    );
+  }
+
+  const dataMin =
+    min !== null ? min : Math.min(...numeric);
+
+  const dataMax =
+    max !== null ? max : Math.max(...numeric);
+
+  const range =
+    dataMax - dataMin || 1;
+
+  const points = numeric
+    .map((value, index) => {
+      const x =
+        padding +
+        (index / Math.max(numeric.length - 1, 1)) *
+          (width - padding * 2);
+
+      const y =
+        height -
+        padding -
+        ((value - dataMin) / range) *
+          (height - padding * 2);
+
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  const latest = numeric[numeric.length - 1];
+
+  return (
+    <div className={`sparkline ${className}`}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+      >
+        <line
+          x1="0"
+          y1="18"
+          x2={width}
+          y2="18"
+          className="chart-grid-line"
+        />
+
+        <line
+          x1="0"
+          y1="35"
+          x2={width}
+          y2="35"
+          className="chart-grid-line"
+        />
+
+        <line
+          x1="0"
+          y1="52"
+          x2={width}
+          y2="52"
+          className="chart-grid-line"
+        />
+
+        <polyline
+          points={points}
+          className="chart-line"
+        />
+
+        <circle
+          cx={points.split(" ").at(-1).split(",")[0]}
+          cy={points.split(" ").at(-1).split(",")[1]}
+          r="2.8"
+          className="chart-point"
+        />
+      </svg>
+
+      <div className="chart-latest">
+        {formatNumber(latest, 2)}
+      </div>
+    </div>
+  );
+}
+
+function TelemetryChart({
+  data = [],
+  min = null,
+  max = null,
+}) {
+  const width = 320;
+  const height = 90;
+  const padding = 6;
+
+  if (!data.length) {
+    return (
+      <div className="telemetry-chart-empty">
+        <span>WAITING FOR SENSOR DATA</span>
+      </div>
+    );
+  }
+
+  const values = data
+    .map(Number)
+    .filter(Number.isFinite);
+
+  if (!values.length) {
+    return (
+      <div className="telemetry-chart-empty">
+        <span>NO VALID TELEMETRY</span>
+      </div>
+    );
+  }
+
+  const minimum =
+    min !== null ? min : Math.min(...values);
+
+  const maximum =
+    max !== null ? max : Math.max(...values);
+
+  const range = maximum - minimum || 1;
+
+  const points = values
+    .map((value, index) => {
+      const x =
+        padding +
+        (index / Math.max(values.length - 1, 1)) *
+          (width - padding * 2);
+
+      const y =
+        height -
+        padding -
+        ((value - minimum) / range) *
+          (height - padding * 2);
+
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  const lastPoint =
+    points.split(" ").at(-1).split(",");
+
+  return (
+    <div className="telemetry-chart">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+      >
+        <line
+          x1="0"
+          y1="22"
+          x2={width}
+          y2="22"
+          className="chart-grid"
+        />
+
+        <line
+          x1="0"
+          y1="45"
+          x2={width}
+          y2="45"
+          className="chart-grid"
+        />
+
+        <line
+          x1="0"
+          y1="68"
+          x2={width}
+          y2="68"
+          className="chart-grid"
+        />
+
+        <polyline
+          points={points}
+          className="chart-line"
+        />
+
+        <circle
+          cx={lastPoint[0]}
+          cy={lastPoint[1]}
+          r="3"
+          className="chart-endpoint"
+        />
+      </svg>
+    </div>
+  );
+}
+
+
+function App(){
   const [connectionStatus, setConnectionStatus] = useState("Connecting");
 
   const [replayStatus, setReplayStatus] = useState({
@@ -29,13 +239,13 @@ function App() {
   const [selectedTrack, setSelectedTrack] = useState(null);
   const [sweepAngle, setSweepAngle] = useState(0);
   const [lastUpdate, setLastUpdate] = useState(null);
-  const telemetryHistory = useRef({
+  const [telemetryHistory, setTelemetryHistory] = useState({
   rcs: [],
   velocity: [],
   probability: [],
 });
-
   useEffect(() => {
+
     const handleConnect = () => {
       setConnectionStatus("Connected");
     };
@@ -49,50 +259,54 @@ function App() {
     };
 
     const handleUpdate = (data) => {
-      const target = {
-        ...data,
-        receivedAt: Date.now(),
-      };
+  const target = {
+    ...data,
+    receivedAt: Date.now(),
+  };
 
-      telemetryHistory.current.rcs.push(
-  Number(data.rcs_dbsm) || 0
-);
+  setTelemetryHistory((previous) => {
+    const limit = 60;
 
-telemetryHistory.current.velocity.push(
-  Number(data.radial_velocity_mps) || 0
-);
+    return {
+      rcs: [
+        ...previous.rcs,
+        Number(data.rcs_dbsm) || 0,
+      ].slice(-limit),
 
-telemetryHistory.current.probability.push(
-  Number(data.uav_probability) || 0
-);
+      velocity: [
+        ...previous.velocity,
+        Number(data.radial_velocity_mps) || 0,
+      ].slice(-limit),
 
-const HISTORY_LIMIT = 60;
-
-telemetryHistory.current.rcs =
-  telemetryHistory.current.rcs.slice(-HISTORY_LIMIT);
-
-telemetryHistory.current.velocity =
-  telemetryHistory.current.velocity.slice(-HISTORY_LIMIT);
-
-telemetryHistory.current.probability =
-  telemetryHistory.current.probability.slice(-HISTORY_LIMIT);
-
-      setTargets((previous) => {
-        const next = {
-          ...previous,
-          [data.track_id]: target,
-        };
-
-        const entries = Object.entries(next)
-          .sort((a, b) => b[1].receivedAt - a[1].receivedAt)
-          .slice(0, MAX_TARGETS);
-
-        return Object.fromEntries(entries);
-      });
-
-      setSelectedTrack((current) => current ?? data.track_id);
-      setLastUpdate(Date.now());
+      probability: [
+        ...previous.probability,
+        Number(data.uav_probability) || 0,
+      ].slice(-limit),
     };
+  });
+
+  setTargets((previous) => {
+    const next = {
+      ...previous,
+      [data.track_id]: target,
+    };
+
+    const entries = Object.entries(next)
+      .sort(
+        (a, b) =>
+          b[1].receivedAt - a[1].receivedAt
+      )
+      .slice(0, MAX_TARGETS);
+
+    return Object.fromEntries(entries);
+  });
+
+  setSelectedTrack(
+    (current) => current ?? data.track_id
+  );
+
+  setLastUpdate(Date.now());
+};
 
     const handleComplete = (data) => {
       setReplayStatus({
@@ -173,6 +387,39 @@ telemetryHistory.current.probability =
           0
         ) / targetList.length
       : 0;
+
+const selectedProbability =
+  selectedTarget
+    ? Number(selectedTarget.uav_probability) || 0
+    : 0;
+
+const selectedRcs =
+  selectedTarget
+    ? Number(selectedTarget.rcs_dbsm) || 0
+    : 0;
+
+const selectedVelocity =
+  selectedTarget
+    ? Number(
+        selectedTarget.radial_velocity_mps
+      ) || 0
+    : 0;
+
+const mediumThreatCount =
+  targetList.filter(
+    (target) =>
+      getThreatLevel(
+        target.uav_probability
+      ) === "MEDIUM"
+  ).length;
+
+const lowThreatCount =
+  targetList.filter(
+    (target) =>
+      getThreatLevel(
+        target.uav_probability
+      ) === "LOW"
+  ).length;
 
   const progress =
     replayStatus.total_observations > 0
@@ -657,112 +904,350 @@ telemetryHistory.current.probability =
           BOTTOM ANALYTICS
          ===================================================== */}
 
-      <section className="bottom-command-panel">
-        <div className="bottom-header">
-          <div>
-            <span>TACTICAL DATA STREAM</span>
-            <strong>ACTIVE TRACK DATABASE</strong>
-          </div>
+     {/* =====================================================
+    LIVE ANALYTICS
+   ===================================================== */}
 
-          <div className="bottom-status">
-            <span className="pulse-dot" />
-            LIVE TELEMETRY
-          </div>
+<section className="analytics-command-panel">
+
+  <div className="analytics-header">
+    <div>
+      <span>REAL-TIME SENSOR ANALYTICS</span>
+      <strong>TELEMETRY / SIGNATURE / CLASSIFICATION</strong>
+    </div>
+
+    <div className="analytics-live">
+      <span className="pulse-dot" />
+      STREAMING
+    </div>
+  </div>
+
+  <div className="analytics-grid">
+
+    {/* RCS */}
+
+    <article className="analytics-card">
+      <div className="analytics-card-header">
+        <div>
+          <span>RCS SIGNATURE</span>
+          <strong>
+            {formatNumber(selectedRcs, 2)}
+            <small> dBsm</small>
+          </strong>
         </div>
 
-        <div className="track-table-wrap">
-          <table className="track-table">
-            <thead>
-              <tr>
-                <th>TRACK</th>
-                <th>CLASS</th>
-                <th>CONF</th>
-                <th>RANGE</th>
-                <th>AZIMUTH</th>
-                <th>ELEVATION</th>
-                <th>RCS</th>
-                <th>DOPPLER</th>
-                <th>THREAT</th>
-              </tr>
-            </thead>
+        <span className="analytics-code">
+          SIG-01
+        </span>
+      </div>
 
-            <tbody>
-              {targetList.slice(0, 6).map((target) => {
-                const threat = getThreatLevel(
+      <TelemetryChart
+        data={telemetryHistory.rcs}
+      />
+
+      <div className="analytics-footer">
+        <span>LIVE CROSS SECTION</span>
+        <strong>
+          {selectedTarget
+            ? "TRACKED"
+            : "STANDBY"}
+        </strong>
+      </div>
+    </article>
+
+
+    {/* DOPPLER */}
+
+    <article className="analytics-card">
+      <div className="analytics-card-header">
+        <div>
+          <span>DOPPLER / RADIAL VELOCITY</span>
+          <strong>
+            {formatNumber(
+              selectedVelocity,
+              2
+            )}
+            <small> m/s</small>
+          </strong>
+        </div>
+
+        <span className="analytics-code">
+          VEL-02
+        </span>
+      </div>
+
+      <TelemetryChart
+        data={telemetryHistory.velocity}
+      />
+
+      <div className="analytics-footer">
+        <span>RADIAL COMPONENT</span>
+        <strong>
+          {selectedVelocity >= 0
+            ? "APPROACH"
+            : "RECESS"}
+        </strong>
+      </div>
+    </article>
+
+
+    {/* CLASSIFICATION */}
+
+    <article className="analytics-card classification-card">
+      <div className="analytics-card-header">
+        <div>
+          <span>UAV CLASSIFICATION</span>
+          <strong>
+            {selectedTarget
+              ? selectedTarget.classification
+              : "---"}
+          </strong>
+        </div>
+
+        <span className="analytics-code">
+          ML-03
+        </span>
+      </div>
+
+      <TelemetryChart
+        data={telemetryHistory.probability}
+        min={0}
+        max={1}
+      />
+
+      <div className="probability-bars">
+
+        <div className="probability-row">
+          <span>UAV</span>
+
+          <div className="probability-track">
+            <span
+              style={{
+                width: `${selectedProbability * 100}%`,
+              }}
+            />
+          </div>
+
+          <strong>
+            {formatNumber(
+              selectedProbability * 100,
+              1
+            )}%
+          </strong>
+        </div>
+
+        <div className="probability-row">
+          <span>NON-UAV</span>
+
+          <div className="probability-track">
+            <span
+              style={{
+                width: `${
+                  (1 - selectedProbability) * 100
+                }%`,
+              }}
+            />
+          </div>
+
+          <strong>
+            {formatNumber(
+              (1 - selectedProbability) * 100,
+              1
+            )}%
+          </strong>
+        </div>
+
+      </div>
+    </article>
+
+
+    {/* THREAT */}
+
+    <article className="analytics-card threat-card">
+
+      <div className="analytics-card-header">
+        <div>
+          <span>CONTACT THREAT MATRIX</span>
+          <strong>
+            {targetList.length}
+            <small> CONTACTS</small>
+          </strong>
+        </div>
+
+        <span className="analytics-code">
+          THR-04
+        </span>
+      </div>
+
+      <div className="threat-matrix">
+
+        <div className="threat-matrix-cell high">
+          <strong>{highThreatCount}</strong>
+          <span>HIGH</span>
+        </div>
+
+        <div className="threat-matrix-cell medium">
+          <strong>{mediumThreatCount}</strong>
+          <span>MEDIUM</span>
+        </div>
+
+        <div className="threat-matrix-cell low">
+          <strong>{lowThreatCount}</strong>
+          <span>LOW</span>
+        </div>
+
+      </div>
+
+      <div className="analytics-footer">
+        <span>TRACK DATABASE</span>
+        <strong>
+          {targetList.length} / {MAX_TARGETS}
+        </strong>
+      </div>
+
+    </article>
+
+  </div>
+
+
+  {/* ACTIVE TRACK DATABASE */}
+
+  <div className="track-database">
+
+    <div className="bottom-header">
+      <div>
+        <span>TACTICAL DATA STREAM</span>
+        <strong>ACTIVE TRACK DATABASE</strong>
+      </div>
+
+      <div className="bottom-status">
+        <span className="pulse-dot" />
+        LIVE TELEMETRY
+      </div>
+    </div>
+
+    <div className="track-table-wrap">
+
+      <table className="track-table">
+
+        <thead>
+          <tr>
+            <th>TRACK</th>
+            <th>CLASS</th>
+            <th>CONF</th>
+            <th>RANGE</th>
+            <th>AZIMUTH</th>
+            <th>ELEVATION</th>
+            <th>RCS</th>
+            <th>DOPPLER</th>
+            <th>THREAT</th>
+          </tr>
+        </thead>
+
+        <tbody>
+
+          {targetList
+            .slice(0, 8)
+            .map((target) => {
+
+              const threat =
+                getThreatLevel(
                   target.uav_probability
                 );
 
-                return (
-                  <tr
-                    key={target.track_id}
-                    className={
-                      target.track_id === selectedTrack
-                        ? "selected-row"
-                        : ""
-                    }
-                    onClick={() =>
-                      setSelectedTrack(target.track_id)
-                    }
+              return (
+                <tr
+                  key={target.track_id}
+                  className={
+                    target.track_id ===
+                    selectedTrack
+                      ? "selected-row"
+                      : ""
+                  }
+                  onClick={() =>
+                    setSelectedTrack(
+                      target.track_id
+                    )
+                  }
+                >
+
+                  <td className="track-cell">
+                    T-{target.track_id}
+                  </td>
+
+                  <td>
+                    {target.classification}
+                  </td>
+
+                  <td>
+                    {(
+                      target.uav_probability *
+                      100
+                    ).toFixed(0)}
+                    %
+                  </td>
+
+                  <td>
+                    {formatNumber(
+                      target.range_m,
+                      1
+                    )} m
+                  </td>
+
+                  <td>
+                    {formatNumber(
+                      target.azimuth_deg,
+                      1
+                    )}°
+                  </td>
+
+                  <td>
+                    {formatNumber(
+                      target.elevation_deg,
+                      1
+                    )}°
+                  </td>
+
+                  <td>
+                    {formatNumber(
+                      target.rcs_dbsm,
+                      2
+                    )}
+                  </td>
+
+                  <td>
+                    {formatNumber(
+                      target.radial_velocity_mps,
+                      2
+                    )}
+                  </td>
+
+                  <td
+                    className={`threat-cell threat-${threat.toLowerCase()}`}
                   >
-                    <td className="track-cell">
-                      T-{target.track_id}
-                    </td>
+                    {threat}
+                  </td>
 
-                    <td>{target.classification}</td>
+                </tr>
+              );
+            })}
 
-                    <td>
-                      {(target.uav_probability * 100).toFixed(0)}%
-                    </td>
+        </tbody>
 
-                    <td>
-                      {formatNumber(target.range_m, 1)} m
-                    </td>
+      </table>
 
-                    <td>
-                      {formatNumber(
-                        target.azimuth_deg,
-                        1
-                      )}
-                      °
-                    </td>
-
-                    <td>
-                      {formatNumber(
-                        target.elevation_deg,
-                        1
-                      )}
-                      °
-                    </td>
-
-                    <td>
-                      {formatNumber(target.rcs_dbsm, 2)}
-                    </td>
-
-                    <td>
-                      {formatNumber(
-                        target.radial_velocity_mps,
-                        2
-                      )}
-                    </td>
-
-                    <td
-                      className={`threat-cell threat-${threat.toLowerCase()}`}
-                    >
-                      {threat}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-
-          {targetList.length === 0 && (
-            <div className="table-empty">
-              NO ACTIVE CONTACTS — RADAR SYSTEM AWAITING SENSOR DATA
-            </div>
-          )}
+      {targetList.length === 0 && (
+        <div className="table-empty">
+          NO ACTIVE CONTACTS — RADAR SYSTEM
+          AWAITING SENSOR DATA
         </div>
-      </section>
+      )}
+
+    </div>
+
+  </div>
+
+</section>
 
       {/* =====================================================
           FOOTER

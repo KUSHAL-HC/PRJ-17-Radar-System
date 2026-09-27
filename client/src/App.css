@@ -2054,3 +2054,304 @@ button:focus-visible {
     min-width: 0;
   }
 }
+
+
+
+/* =========================================================
+   PRJ-17 LIVE ANALYTICS CONSOLE
+   ========================================================= */
+
+.analytics-command-panel {
+  position: relative;
+  margin: 8px 10px 0;
+  border: 1px solid rgba(57, 255, 194, 0.14);
+  background:
+    linear-gradient(
+      145deg,
+      rgba(3, 18, 14, 0.98),
+      rgba(1, 7, 5, 0.98)
+    );
+  overflow: hidden;
+}
+
+.analytics-header {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  border-bottom: 1px solid rgba(57, 255, 194, 0.12);
+}
+
+.analytics-header > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.analytics-header span {
+  color: rgba(150, 190, 180, 0.58);
+  font-size: 7px;
+  letter-spacing: 2px;
+}
+
+.analytics-header strong {
+  color: #d9fff2;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 1.4px;
+}
+
+.analytics-live {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #39ffc2 !important;
+  font-family: monospace;
+  font-size: 8px !important;
+  letter-spacing: 1.5px !important;
+}
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  border-bottom: 1px solid rgba(57, 255, 194, 0.12);
+}
+
+.analytics-card {
+  min-height: 155px;
+  padding: 14px;
+  border-right: 1px solid rgba(57, 255, 194, 0.1);
+}
+
+.analytics-card:last-child {
+  border-right: 0;
+}
+
+.analytics-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.analytics-card-header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.analytics-card-header span {
+  color: rgba(150, 190, 180, 0.55);
+  font-size: 7px;
+  letter-spacing: 1.5px;
+}
+
+.analytics-card-header strong {
+  color: #39ffc2;
+  font-family:
+    "SFMono-Regular",
+    "Roboto Mono",
+    monospace;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.analytics-card-header strong small {
+  color: rgba(150, 190, 180, 0.65);
+  font-size: 8px;
+  font-weight: 400;
+}
+
+.analytics-code {
+  color: rgba(57, 255, 194, 0.35) !important;
+  font-family: monospace;
+  font-size: 7px !important;
+}
+
+.telemetry-chart {
+  position: relative;
+  height: 76px;
+  margin-top: 8px;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      rgba(57, 255, 194, 0.018),
+      rgba(57, 255, 194, 0)
+    );
+}
+
+.telemetry-chart svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.chart-grid {
+  stroke: rgba(57, 255, 194, 0.08);
+  stroke-width: 0.5;
+}
+
+.chart-line {
+  fill: none;
+  stroke: #39ffc2;
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+  filter:
+    drop-shadow(
+      0 0 4px rgba(57, 255, 194, 0.5)
+    );
+}
+
+.chart-endpoint {
+  fill: #39ffc2;
+  filter:
+    drop-shadow(
+      0 0 5px rgba(57, 255, 194, 0.8)
+    );
+}
+
+.telemetry-chart-empty {
+  height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(150, 190, 180, 0.3);
+  font-family: monospace;
+  font-size: 7px;
+  letter-spacing: 1.4px;
+}
+
+.analytics-footer {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 6px;
+  border-top: 1px solid rgba(57, 255, 194, 0.07);
+}
+
+.analytics-footer span {
+  color: rgba(150, 190, 180, 0.4);
+  font-size: 6px;
+  letter-spacing: 1.1px;
+}
+
+.analytics-footer strong {
+  color: rgba(57, 255, 194, 0.75);
+  font-family: monospace;
+  font-size: 7px;
+}
+
+.probability-bars {
+  margin-top: 5px;
+}
+
+.probability-row {
+  display: grid;
+  grid-template-columns: 50px 1fr 40px;
+  align-items: center;
+  gap: 7px;
+  margin-top: 5px;
+}
+
+.probability-row > span {
+  color: rgba(150, 190, 180, 0.55);
+  font-family: monospace;
+  font-size: 6px;
+}
+
+.probability-row > strong {
+  color: #d9fff2;
+  font-family: monospace;
+  font-size: 7px;
+  text-align: right;
+}
+
+.probability-track {
+  height: 3px;
+  background: rgba(57, 255, 194, 0.08);
+}
+
+.probability-track span {
+  display: block;
+  height: 100%;
+  background: #39ffc2;
+  box-shadow:
+    0 0 7px rgba(57, 255, 194, 0.45);
+}
+
+.threat-matrix {
+  display: grid;
+  grid-template-columns:
+    repeat(3, 1fr);
+  height: 78px;
+  margin-top: 12px;
+}
+
+.threat-matrix-cell {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  border-right: 1px solid rgba(57, 255, 194, 0.08);
+}
+
+.threat-matrix-cell:last-child {
+  border-right: 0;
+}
+
+.threat-matrix-cell strong {
+  font-family: monospace;
+  font-size: 21px;
+  font-weight: 400;
+}
+
+.threat-matrix-cell span {
+  margin-top: 5px;
+  color: rgba(150, 190, 180, 0.5);
+  font-size: 6px;
+  letter-spacing: 1.2px;
+}
+
+.threat-matrix-cell.high strong {
+  color: #ff5050;
+}
+
+.threat-matrix-cell.medium strong {
+  color: #ffd166;
+}
+
+.threat-matrix-cell.low strong {
+  color: #39ffc2;
+}
+
+.track-database {
+  background: rgba(0, 7, 5, 0.5);
+}
+
+.track-database .bottom-header {
+  min-height: 44px;
+  padding: 0 14px;
+}
+
+.analytics-command-panel
+.track-table-wrap {
+  max-height: 190px;
+}
+
+/* Make analytics fit desktop command-center proportions */
+
+@media (max-width: 1100px) {
+  .analytics-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .analytics-card:nth-child(2) {
+    border-right: 0;
+  }
+
+  .analytics-card:nth-child(-n + 2) {
+    border-bottom:
+      1px solid rgba(57, 255, 194, 0.1);
+  }
+}
