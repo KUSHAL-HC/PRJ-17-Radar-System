@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo , useRef, useState } from "react";
 import socket from "./services/socket";
 import "./App.css";
 import Radar3D from "./components/Radar3D";
@@ -29,6 +29,11 @@ function App() {
   const [selectedTrack, setSelectedTrack] = useState(null);
   const [sweepAngle, setSweepAngle] = useState(0);
   const [lastUpdate, setLastUpdate] = useState(null);
+  const telemetryHistory = useRef({
+  rcs: [],
+  velocity: [],
+  probability: [],
+});
 
   useEffect(() => {
     const handleConnect = () => {
@@ -48,6 +53,29 @@ function App() {
         ...data,
         receivedAt: Date.now(),
       };
+
+      telemetryHistory.current.rcs.push(
+  Number(data.rcs_dbsm) || 0
+);
+
+telemetryHistory.current.velocity.push(
+  Number(data.radial_velocity_mps) || 0
+);
+
+telemetryHistory.current.probability.push(
+  Number(data.uav_probability) || 0
+);
+
+const HISTORY_LIMIT = 60;
+
+telemetryHistory.current.rcs =
+  telemetryHistory.current.rcs.slice(-HISTORY_LIMIT);
+
+telemetryHistory.current.velocity =
+  telemetryHistory.current.velocity.slice(-HISTORY_LIMIT);
+
+telemetryHistory.current.probability =
+  telemetryHistory.current.probability.slice(-HISTORY_LIMIT);
 
       setTargets((previous) => {
         const next = {
@@ -370,7 +398,7 @@ function App() {
             <Radar3D
               targets={targetList}
               selectedTrack={selectedTrack}
-              onSelect={setSelectedTrack}
+              onSelect={sweepAngle}
             />
 
             <div className="viewport-corner top-left">

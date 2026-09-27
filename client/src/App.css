@@ -1731,3 +1731,326 @@ button:focus-visible {
     padding: 8px;
   }
 }
+
+
+
+/* =========================================================
+   PRJ-17 COMMAND CENTER — ENHANCED HUD LAYER
+   ========================================================= */
+
+.command-center {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(
+      circle at 50% 42%,
+      rgba(0, 255, 190, 0.035),
+      transparent 42%
+    ),
+    #010504;
+}
+
+/* Thin technical frame around the application */
+
+.command-center::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  pointer-events: none;
+  z-index: 50;
+  border: 1px solid rgba(57, 255, 194, 0.08);
+}
+
+/* ---------------------------------------------------------
+   HEADER ENHANCEMENT
+   --------------------------------------------------------- */
+
+.command-header {
+  position: relative;
+  z-index: 5;
+  backdrop-filter: blur(12px);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(3, 16, 13, 0.97),
+      rgba(1, 8, 6, 0.94)
+    );
+  box-shadow:
+    0 1px 0 rgba(57, 255, 194, 0.12),
+    0 8px 30px rgba(0, 0, 0, 0.35);
+}
+
+.brand-mark {
+  filter:
+    drop-shadow(0 0 5px rgba(57, 255, 194, 0.5));
+}
+
+.brand-eyebrow {
+  letter-spacing: 0.22em;
+}
+
+/* ---------------------------------------------------------
+   HUD PANELS
+   --------------------------------------------------------- */
+
+.hud-panel {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(5, 22, 18, 0.94),
+      rgba(1, 9, 7, 0.97)
+    );
+  border-color: rgba(57, 255, 194, 0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(57, 255, 194, 0.06),
+    0 10px 35px rgba(0, 0, 0, 0.25);
+}
+
+.hud-panel:hover {
+  border-color: rgba(57, 255, 194, 0.28);
+}
+
+/* Technical corner marks */
+
+.hud-panel::before {
+  pointer-events: none;
+}
+
+.hud-panel::after {
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------
+   RADAR COMMAND AREA
+   --------------------------------------------------------- */
+
+.radar-command-panel {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      ellipse at center,
+      rgba(0, 45, 35, 0.14),
+      transparent 65%
+    ),
+    rgba(1, 7, 5, 0.94);
+}
+
+.radar-command-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 49.9%,
+      rgba(57, 255, 194, 0.025) 50%,
+      transparent 50.1%
+    ),
+    linear-gradient(
+      0deg,
+      transparent 49.9%,
+      rgba(57, 255, 194, 0.025) 50%,
+      transparent 50.1%
+    );
+  z-index: 2;
+}
+
+/* ---------------------------------------------------------
+   RADAR VIEWPORT
+   --------------------------------------------------------- */
+
+.radar-viewport {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      circle at center,
+      rgba(0, 90, 65, 0.08),
+      transparent 55%
+    ),
+    #010806;
+  box-shadow:
+    inset 0 0 80px rgba(0, 0, 0, 0.55),
+    inset 0 0 2px rgba(57, 255, 194, 0.2);
+}
+
+/* Scanline layer */
+
+.radar-viewport::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  opacity: 0.18;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent 0,
+      transparent 3px,
+      rgba(57, 255, 194, 0.018) 4px
+    );
+}
+
+/* Canvas must remain above background effects */
+
+.radar-viewport canvas {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---------------------------------------------------------
+   RADAR HUD CORNERS
+   --------------------------------------------------------- */
+
+.viewport-corner {
+  z-index: 10;
+  min-width: 90px;
+  padding: 7px 10px;
+  border: 1px solid rgba(57, 255, 194, 0.16);
+  background: rgba(1, 10, 8, 0.72);
+  backdrop-filter: blur(6px);
+  box-shadow:
+    0 0 20px rgba(0, 0, 0, 0.3);
+}
+
+.viewport-corner span {
+  color: rgba(150, 190, 180, 0.65);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+}
+
+.viewport-corner strong {
+  color: #39ffc2;
+  font-family: "JetBrains Mono", "SFMono-Regular", monospace;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 8px rgba(57, 255, 194, 0.35);
+}
+
+/* ---------------------------------------------------------
+   AXIS LABELS
+   --------------------------------------------------------- */
+
+.axis-label {
+  z-index: 10;
+  color: rgba(57, 255, 194, 0.42);
+  font-family: "JetBrains Mono", "SFMono-Regular", monospace;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------
+   CROSSHAIR
+   --------------------------------------------------------- */
+
+.radar-crosshair {
+  z-index: 8;
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+.radar-crosshair span {
+  box-shadow:
+    0 0 8px rgba(57, 255, 194, 0.35);
+}
+
+/* ---------------------------------------------------------
+   RIGHT TRACK PANEL
+   --------------------------------------------------------- */
+
+.right-rail {
+  position: relative;
+}
+
+.selected-panel {
+  background:
+    linear-gradient(
+      145deg,
+      rgba(4, 25, 20, 0.96),
+      rgba(1, 9, 7, 0.98)
+    );
+}
+
+/* Selected target telemetry emphasis */
+
+.selected-panel strong {
+  text-shadow:
+    0 0 8px rgba(57, 255, 194, 0.2);
+}
+
+/* ---------------------------------------------------------
+   TELEMETRY NUMBERS
+   --------------------------------------------------------- */
+
+.system-readout strong,
+.radar-bottom strong {
+  font-family:
+    "JetBrains Mono",
+    "SFMono-Regular",
+    "Roboto Mono",
+    monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------
+   LIVE STATUS INDICATORS
+   --------------------------------------------------------- */
+
+.system-light.online {
+  box-shadow:
+    0 0 6px rgba(57, 255, 194, 0.8),
+    0 0 16px rgba(57, 255, 194, 0.35);
+}
+
+.system-light.offline {
+  box-shadow:
+    0 0 6px rgba(255, 80, 80, 0.7),
+    0 0 16px rgba(255, 80, 80, 0.25);
+}
+
+.system-light.standby {
+  box-shadow:
+    0 0 6px rgba(255, 209, 102, 0.55);
+}
+
+/* ---------------------------------------------------------
+   DATA TABLE
+   --------------------------------------------------------- */
+
+.track-table {
+  font-variant-numeric: tabular-nums;
+}
+
+.track-table tbody tr {
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+.track-table tbody tr:hover {
+  background:
+    rgba(57, 255, 194, 0.035);
+}
+
+/* ---------------------------------------------------------
+   RESPONSIVE COMMAND CENTER
+   --------------------------------------------------------- */
+
+@media (max-width: 1200px) {
+  .command-center {
+    min-width: 1100px;
+  }
+}
+
+@media (max-width: 900px) {
+  .command-center {
+    min-width: 0;
+  }
+}
