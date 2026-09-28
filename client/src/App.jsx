@@ -1,4 +1,4 @@
-import { useEffect, useMemo , useState } from "react";
+import { useEffect, useMemo , useRef , useState } from "react";
 import socket from "./services/socket";
 import "./App.css";
 import Radar3D from "./components/Radar3D";
@@ -316,11 +316,7 @@ function App(){
   const [selectedTrack, setSelectedTrack] = useState(null);
   const [sweepAngle, setSweepAngle] = useState(0);
   const [lastUpdate, setLastUpdate] = useState(null);
-  const [telemetryHistory, setTelemetryHistory] = useState({
-  rcs: [],
-  velocity: [],
-  probability: [],
-});
+  const telemetryHistory = useRef({});
   useEffect(() => {
 
     const handleConnect = () => {
@@ -341,26 +337,33 @@ function App(){
     receivedAt: Date.now(),
   };
 
-  setTelemetryHistory((previous) => {
-    const limit = 60;
+ const trackId = String(data.track_id);
 
-    return {
-      rcs: [
-        ...previous.rcs,
-        Number(data.rcs_dbsm) || 0,
-      ].slice(-limit),
+const previousHistory =
+  telemetryHistory.current[trackId] || {
+    rcs: [],
+    velocity: [],
+    probability: [],
+  };
 
-      velocity: [
-        ...previous.velocity,
-        Number(data.radial_velocity_mps) || 0,
-      ].slice(-limit),
+const nextHistory = {
+  rcs: [
+    ...previousHistory.rcs,
+    Number(data.rcs_dbsm) || 0,
+  ].slice(-60),
 
-      probability: [
-        ...previous.probability,
-        Number(data.uav_probability) || 0,
-      ].slice(-limit),
-    };
-  });
+  velocity: [
+    ...previousHistory.velocity,
+    Number(data.radial_velocity_mps) || 0,
+  ].slice(-60),
+
+  probability: [
+    ...previousHistory.probability,
+    Number(data.uav_probability) || 0,
+  ].slice(-60),
+};
+
+telemetryHistory.current[trackId] = nextHistory;
 
   setTargets((previous) => {
     const next = {
@@ -440,6 +443,19 @@ function App(){
   const selectedTarget =
     selectedTrack !== null ? targets[selectedTrack] : null;
 
+  const selectedTelemetry =
+  selectedTrack !== null
+    ? telemetryHistory.current[String(selectedTrack)] || {
+        rcs: [],
+        velocity: [],
+        probability: [],
+      }
+    : {
+        rcs: [],
+        velocity: [],
+        probability: [],
+      };
+
   const uavCount = targetList.filter(
     (target) => target.classification === "UAV"
   ).length;
@@ -505,11 +521,14 @@ const lowThreatCount =
         100
       : 0;
 
-  const startReplay = () => {
-    setTargets({});
-    setSelectedTrack(null);
-    socket.emit("radar:start");
-  };
+ const startReplay = () => {
+  telemetryHistory.current = {};
+
+  setTargets({});
+  setSelectedTrack(null);
+
+  socket.emit("radar:start");
+};
 
   const stopReplay = () => {
     socket.emit("radar:stop");
@@ -1016,7 +1035,7 @@ const lowThreatCount =
       </div>
 
       <TelemetryChart
-        data={telemetryHistory.rcs}
+        data={selectedTelemetry.rcs}
       />
 
       <div className="analytics-footer">
@@ -1051,7 +1070,7 @@ const lowThreatCount =
       </div>
 
       <TelemetryChart
-        data={telemetryHistory.velocity}
+        data={selectedTelemetry.velocity}
       />
 
       <div className="analytics-footer">
@@ -1084,7 +1103,7 @@ const lowThreatCount =
       </div>
 
       <TelemetryChart
-        data={telemetryHistory.probability}
+        data={selectedTelemetry.probability}
         min={0}
         max={1}
       />

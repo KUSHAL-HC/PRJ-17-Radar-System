@@ -521,25 +521,23 @@ function Forest({
   const trunkMaterial =
     useMemo(
       () =>
-        new THREE.MeshStandardMaterial({
-          color:
-            "#211f19",
-          roughness: 1,
-          metalness: 0,
-        }),
-      []
+         new THREE.MeshStandardMaterial({
+        color: "#0b100d",
+        roughness: 1,
+        metalness: 0,
+      }),
+    []
     );
 
   const crownMaterial =
     useMemo(
       () =>
         new THREE.MeshStandardMaterial({
-          color:
-            "#29452f",
-          roughness: 1,
-          metalness: 0,
-        }),
-      []
+        color: "#10251b",
+        roughness: 1,
+        metalness: 0,
+      }),
+    []
     );
 
   const trunks =
@@ -707,9 +705,11 @@ function Mountain({
 
         <meshStandardMaterial
           color={rock}
-          roughness={0.95}
+          roughness={1}
           metalness={0}
           flatShading
+          transparent
+          opacity={0.58}
         />
       </mesh>
 
@@ -742,10 +742,12 @@ function Mountain({
         />
 
         <meshStandardMaterial
-          color="#30322e"
+          color="#171c19"
           roughness={1}
           metalness={0}
           flatShading
+          transparent
+          opacity={0.52}
         />
       </mesh>
 
@@ -781,10 +783,12 @@ function Mountain({
         />
 
         <meshStandardMaterial
-          color="#171916"
+          color="#0b100d"
           roughness={1}
           metalness={0}
           flatShading
+          transparent
+          opacity={0.62}
         />
       </mesh>
     </group>
@@ -1048,11 +1052,14 @@ export default function TerrainLandscape() {
         ]}
         receiveShadow
       >
-        <meshStandardMaterial
-          vertexColors
-          roughness={1}
-          metalness={0}
-          side={THREE.DoubleSide}
+              <meshStandardMaterial
+                  vertexColors
+                  roughness={1}
+                  metalness={0}
+                  side={THREE.DoubleSide}
+                  transparent
+                  opacity={0.42}
+                  depthWrite={false}
         />
       </mesh>
 

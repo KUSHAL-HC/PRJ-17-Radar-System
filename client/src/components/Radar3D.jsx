@@ -342,6 +342,10 @@ function RadarSweep({
       return;
     }
 
+    /*
+     * Keep the sweep synchronized with the existing
+     * radar animation and target-detection system.
+     */
     sweepRef.current.rotation.y +=
       delta * 0.75;
 
@@ -354,10 +358,10 @@ function RadarSweep({
       );
 
     sweepState.current =
-      normalizeAngle(
-        -degrees
-      );
+      normalizeAngle(-degrees);
   });
+
+  const beamColor = "#39ffc2";
 
   return (
     <group
@@ -371,11 +375,15 @@ function RadarSweep({
       ]}
       position={[
         0,
-        0.12,
+        0.14,
         0,
       ]}
     >
-      {/* Wide detection wedge */}
+
+      {/* =================================================
+          BROAD RADAR SWEEP FIELD
+         ================================================= */}
+
       <mesh
         rotation={[
           -Math.PI / 2,
@@ -386,25 +394,27 @@ function RadarSweep({
         <circleGeometry
           args={[
             10,
-            32,
+            96,
             0,
-            Math.PI / 9,
+            Math.PI / 5.2,
           ]}
         />
 
         <meshBasicMaterial
-          color="#2affbd"
+          color={beamColor}
           transparent
-          opacity={0.055}
+          opacity={0.035}
           side={THREE.DoubleSide}
           depthWrite={false}
-          blending={
-            THREE.AdditiveBlending
-          }
+          blending={THREE.AdditiveBlending}
         />
       </mesh>
 
-      {/* Secondary fading wedge */}
+
+      {/* =================================================
+          SECONDARY FADE
+         ================================================= */}
+
       <mesh
         rotation={[
           -Math.PI / 2,
@@ -415,25 +425,58 @@ function RadarSweep({
         <circleGeometry
           args={[
             10,
-            32,
+            96,
             0,
-            Math.PI / 20,
+            Math.PI / 12,
           ]}
         />
 
         <meshBasicMaterial
           color="#7affdc"
           transparent
-          opacity={0.08}
+          opacity={0.065}
           side={THREE.DoubleSide}
           depthWrite={false}
-          blending={
-            THREE.AdditiveBlending
-          }
+          blending={THREE.AdditiveBlending}
         />
       </mesh>
 
-      {/* Main sweep line */}
+
+      {/* =================================================
+          INNER HOT ZONE
+         ================================================= */}
+
+      <mesh
+        rotation={[
+          -Math.PI / 2,
+          0,
+          0,
+        ]}
+      >
+        <circleGeometry
+          args={[
+            10,
+            64,
+            0,
+            Math.PI / 28,
+          ]}
+        />
+
+        <meshBasicMaterial
+          color="#b8ffe9"
+          transparent
+          opacity={0.10}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+
+
+      {/* =================================================
+          PRIMARY SWEEP BEAM
+         ================================================= */}
+
       <mesh
         position={[
           0,
@@ -443,33 +486,124 @@ function RadarSweep({
       >
         <boxGeometry
           args={[
-            0.025,
-            0.025,
+            0.035,
+            0.035,
             10,
           ]}
         />
 
         <meshBasicMaterial
-          color="#8affdf"
+          color="#baffed"
           transparent
-          opacity={0.95}
+          opacity={1}
+          toneMapped={false}
         />
       </mesh>
 
-      {/* Sweep origin glow */}
-      <mesh>
+
+      {/* =================================================
+          BEAM GLOW
+         ================================================= */}
+
+      <mesh
+        position={[
+          0,
+          0,
+          -5,
+        ]}
+      >
+        <boxGeometry
+          args={[
+            0.13,
+            0.035,
+            10,
+          ]}
+        />
+
+        <meshBasicMaterial
+          color={beamColor}
+          transparent
+          opacity={0.16}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+
+
+      {/* =================================================
+          OUTER BEAM HALO
+         ================================================= */}
+
+      <mesh
+        position={[
+          0,
+          0,
+          -5,
+        ]}
+      >
+        <boxGeometry
+          args={[
+            0.32,
+            0.02,
+            10,
+          ]}
+        />
+
+        <meshBasicMaterial
+          color={beamColor}
+          transparent
+          opacity={0.045}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+
+
+      {/* =================================================
+          RADIAL BEAM ENDPOINT
+         ================================================= */}
+
+      <mesh
+        position={[
+          0,
+          0,
+          -9.9,
+        ]}
+      >
         <sphereGeometry
           args={[
-            0.07,
+            0.055,
             12,
             12,
           ]}
         />
 
         <meshBasicMaterial
-          color="#9ffff0"
+          color="#d9fff5"
+          toneMapped={false}
         />
       </mesh>
+
+
+      {/* =================================================
+          ORIGIN SENSOR GLOW
+         ================================================= */}
+
+      <mesh>
+        <sphereGeometry
+          args={[
+            0.075,
+            16,
+            16,
+          ]}
+        />
+
+        <meshBasicMaterial
+          color="#d9fff5"
+          toneMapped={false}
+        />
+      </mesh>
+
     </group>
   );
 }
@@ -540,35 +674,45 @@ function TargetTrail({
   trailRef,
   lineRef,
 }) {
-  const geometry =
-    useMemo(() => {
-      const positions =
-        new Float32Array(
-          MAX_TRAIL_POINTS * 3
-        );
+  const geometry = useMemo(() => {
+    const positions = new Float32Array(
+      MAX_TRAIL_POINTS * 3
+    );
 
-      const geo =
-        new THREE.BufferGeometry();
+    const alpha = new Float32Array(
+      MAX_TRAIL_POINTS
+    );
 
-      geo.setAttribute(
-        "position",
-        new THREE.BufferAttribute(
-          positions,
-          3
-        )
-      );
+    const geo = new THREE.BufferGeometry();
 
-      geo.setDrawRange(
-        0,
-        0
-      );
+    geo.setAttribute(
+      "position",
+      new THREE.BufferAttribute(
+        positions,
+        3
+      )
+    );
 
-      return geo;
-    }, []);
+    geo.setAttribute(
+      "aAlpha",
+      new THREE.BufferAttribute(
+        alpha,
+        1
+      )
+    );
+
+    geo.setDrawRange(0, 0);
+
+    return geo;
+  }, []);
+
+  const trailColor = useMemo(
+    () => new THREE.Color(color),
+    [color]
+  );
 
   useEffect(() => {
-    lineRef.current =
-      geometry;
+    lineRef.current = geometry;
 
     return () => {
       geometry.dispose();
@@ -576,57 +720,61 @@ function TargetTrail({
   }, [geometry, lineRef]);
 
   useFrame(() => {
-    if (!geometry) {
-      return;
-    }
-
-    const points =
-      trailRef.current;
+    const points = trailRef.current;
 
     if (
       !points ||
       points.length < 2
     ) {
-      geometry.setDrawRange(
-        0,
-        0
-      );
-
+      geometry.setDrawRange(0, 0);
       return;
     }
 
-    const attribute =
-      geometry.attributes
-        .position;
+    const positionAttribute =
+      geometry.attributes.position;
 
-    const max =
-      Math.min(
-        points.length,
-        MAX_TRAIL_POINTS
-      );
+    const alphaAttribute =
+      geometry.attributes.aAlpha;
 
-    for (
-      let i = 0;
-      i < max;
-      i++
-    ) {
+    const max = Math.min(
+      points.length,
+      MAX_TRAIL_POINTS
+    );
+
+    for (let i = 0; i < max; i++) {
       const point =
         points[
-          points.length -
-            max +
-            i
+          points.length - max + i
         ];
 
-      attribute.setXYZ(
+      positionAttribute.setXYZ(
         i,
         point.x,
         point.y,
         point.z
       );
+
+      /*
+       * Oldest point = faint.
+       * Newest point = fully visible.
+       */
+      const normalized =
+        i / Math.max(max - 1, 1);
+
+      const fade =
+        Math.pow(
+          normalized,
+          1.35
+        );
+
+      alphaAttribute.setX(
+        i,
+        0.04 + fade * 0.9
+      );
     }
 
-    attribute.needsUpdate =
-      true;
+    positionAttribute.needsUpdate = true;
+    alphaAttribute.needsUpdate = true;
 
     geometry.setDrawRange(
       0,
@@ -635,17 +783,46 @@ function TargetTrail({
   });
 
   return (
-    <line
-      geometry={geometry}
-    >
-      <lineBasicMaterial
-        color={color}
+    <line geometry={geometry}>
+      <shaderMaterial
         transparent
-        opacity={0.28}
         depthWrite={false}
-        blending={
-          THREE.AdditiveBlending
-        }
+        blending={THREE.AdditiveBlending}
+        uniforms={{
+          uColor: {
+            value: trailColor,
+          },
+        }}
+        vertexShader={`
+          attribute float aAlpha;
+
+          varying float vAlpha;
+
+          void main() {
+            vAlpha = aAlpha;
+
+            vec4 mvPosition =
+              modelViewMatrix *
+              vec4(position, 1.0);
+
+            gl_Position =
+              projectionMatrix *
+              mvPosition;
+          }
+        `}
+        fragmentShader={`
+          uniform vec3 uColor;
+
+          varying float vAlpha;
+
+          void main() {
+            gl_FragColor =
+              vec4(
+                uColor,
+                vAlpha * 0.42
+              );
+          }
+        `}
       />
     </line>
   );
@@ -913,23 +1090,147 @@ function Target({
         </line>
 
         {/* Target core */}
-        <mesh ref={pulse}>
-          <octahedronGeometry
-            args={[
-              selected
-                ? 0.27
-                : 0.17,
-              1,
-            ]}
-          />
+       {/* =================================================
+    TARGET CONTACT CORE
+   ================================================= */}
 
-          <meshBasicMaterial
-            color={color}
-            wireframe={!selected}
-            toneMapped={false}
-          />
-        </mesh>
+{/* Outer energy field */}
+<mesh
+  scale={
+    selected
+      ? 1.15
+      : 1
+  }
+>
+  <sphereGeometry
+    args={[
+      selected
+        ? 0.34
+        : 0.23,
+      16,
+      16,
+    ]}
+  />
 
+  <meshBasicMaterial
+    color={color}
+    transparent
+    opacity={
+      selected
+        ? 0.10
+        : 0.055
+    }
+    depthWrite={false}
+    blending={
+      THREE.AdditiveBlending
+    }
+  />
+</mesh>
+
+
+{/* Main target body */}
+<mesh ref={pulse}>
+  <octahedronGeometry
+    args={[
+      selected
+        ? 0.30
+        : 0.20,
+      1,
+    ]}
+  />
+
+  <meshBasicMaterial
+    color={color}
+    wireframe={!selected}
+    toneMapped={false}
+  />
+</mesh>
+
+
+{/* Bright contact point */}
+<mesh>
+  <sphereGeometry
+    args={[
+      selected
+        ? 0.095
+        : 0.065,
+      12,
+      12,
+    ]}
+  />
+
+  <meshBasicMaterial
+    color="#eafff9"
+    toneMapped={false}
+  />
+</mesh>
+
+
+{/* =================================================
+    CONTACT CROSSHAIR
+   ================================================= */}
+
+<group>
+  {/* Horizontal */}
+  <mesh
+    position={[
+      0,
+      0,
+      0,
+    ]}
+  >
+    <boxGeometry
+      args={[
+        selected
+          ? 1.15
+          : 0.65,
+        0.008,
+        0.008,
+      ]}
+    />
+
+    <meshBasicMaterial
+      color={color}
+      transparent
+      opacity={
+        selected
+          ? 0.75
+          : 0.35
+      }
+      toneMapped={false}
+    />
+  </mesh>
+
+  {/* Vertical */}
+  <mesh
+    position={[
+      0,
+      0,
+      0,
+    ]}
+  >
+    <boxGeometry
+      args={[
+        0.008,
+        0.008,
+        selected
+          ? 1.15
+          : 0.65,
+      ]}
+    />
+
+    <meshBasicMaterial
+      color={color}
+      transparent
+      opacity={
+        selected
+          ? 0.75
+          : 0.35
+      }
+      toneMapped={false}
+    />
+  </mesh>
+</group>
         {/* Detection ring */}
         <mesh
           ref={detectionRing}
@@ -1081,6 +1382,9 @@ function Targets({
             }
             sweepState={
               sweepState
+            }
+            onSelect={
+              onSelect
             }
           />
         )
