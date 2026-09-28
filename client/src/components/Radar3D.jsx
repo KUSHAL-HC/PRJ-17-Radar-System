@@ -659,6 +659,7 @@ function Target({
   target,
   selected,
   sweepState,
+  onSelect,
 }) {
   const group = useRef();
   const pulse = useRef();
@@ -881,7 +882,9 @@ function Target({
           Target body
       --------------------------------------- */}
 
-      <group ref={group}>
+      <group
+      ref={group}
+      onClick={(event) => {event.stopPropagation();onSelect?.(target.track_id);}}>
         {/* Altitude stem */}
         <line>
           <bufferGeometry
@@ -1050,11 +1053,12 @@ function Target({
 /* =========================================================
    TARGET COLLECTION
    ========================================================= */
-
+  
 function Targets({
   targets,
   selectedTrack,
   sweepState,
+  onSelect,
 }) {
   return (
     <group>
@@ -1148,9 +1152,10 @@ function CardinalLabels() {
    ========================================================= */
 
 function RadarScene({
-  targets,
+   targets,
   selectedTrack,
   sweepAngle,
+  onSelect,
 }) {
   const sweepState =
     useRef(
@@ -1254,15 +1259,7 @@ function RadarScene({
 
       <RadarOrigin />
 
-      <Targets
-        targets={targets}
-        selectedTrack={
-          selectedTrack
-        }
-        sweepState={
-          sweepState
-        }
-      />
+      <Targets targets={targets}selectedTrack={selectedTrack}sweepState={sweepState}onSelect={onSelect}/>
 
       <CardinalLabels />
 
@@ -1291,6 +1288,7 @@ export default function Radar3D({
   targets = [],
   selectedTrack = null,
   sweepAngle = 0,
+  onSelect,
 }) {
   return (
     <div
@@ -1312,17 +1310,7 @@ export default function Radar3D({
             "high-performance",
         }}
       >
-        <RadarScene
-          targets={
-            targets
-          }
-          selectedTrack={
-            selectedTrack
-          }
-          sweepAngle={
-            sweepAngle
-          }
-        />
+      <RadarScene targets={targets} selectedTrack={selectedTrack} sweepAngle={sweepAngle} onSelect={onSelect}/>
       </Canvas>
     </div>
   );

@@ -225,6 +225,83 @@ function TelemetryChart({
   );
 }
 
+function TargetLockHUD({ target }) {
+  if (!target) {
+    return (
+      <div className="target-lock-hud target-lock-empty">
+        <span>NO TRACK LOCK</span>
+      </div>
+    );
+  }
+
+  const probability =
+    Number(target.uav_probability) || 0;
+
+  const range =
+    Number(target.range_m) || 0;
+
+  const azimuth =
+    Number(target.azimuth_deg) || 0;
+
+  /*
+   * Tactical 2D HUD position.
+   * This is intentionally an operator overlay rather than
+   * attempting to replace the 3D projection.
+   */
+  const angle =
+    ((azimuth - 90) * Math.PI) / 180;
+
+  const radius =
+    Math.min(range / 1000, 0.88) * 38;
+
+  const x =
+    50 + Math.cos(angle) * radius;
+
+  const y =
+    50 + Math.sin(angle) * radius;
+
+  return (
+    <div
+      className="target-lock-hud"
+      style={{
+        left: `${x}%`,
+        top: `${y}%`,
+      }}
+    >
+      <div className="lock-bracket">
+        <span className="lock-corner tl" />
+        <span className="lock-corner tr" />
+        <span className="lock-corner bl" />
+        <span className="lock-corner br" />
+
+        <span className="lock-cross horizontal" />
+        <span className="lock-cross vertical" />
+      </div>
+
+      <div className="lock-label">
+        <div className="lock-title">
+          <span className="lock-dot" />
+          TRACK LOCK
+        </div>
+
+        <strong>
+          T-{target.track_id}
+        </strong>
+
+        <span>
+          {target.classification}{" "}
+          {(probability * 100).toFixed(1)}%
+        </span>
+
+        <span>
+          {range.toFixed(1)} M /{" "}
+          {azimuth.toFixed(1)}°
+        </span>
+      </div>
+    </div>
+  );
+}
+
 
 function App(){
   const [connectionStatus, setConnectionStatus] = useState("Connecting");
@@ -642,11 +719,7 @@ const lowThreatCount =
           </div>
 
           <div className="radar-viewport">
-            <Radar3D
-              targets={targetList}
-              selectedTrack={selectedTrack}
-              onSelect={sweepAngle}
-            />
+            <Radar3D targets={targetList} selectedTrack={selectedTrack} sweepAngle={sweepAngle} onSelect={setSelectedTrack}/>
 
             <div className="viewport-corner top-left">
               <span>SCAN</span>
@@ -676,6 +749,7 @@ const lowThreatCount =
               <span />
               <span />
             </div>
+            <TargetLockHUD target={selectedTarget} />
           </div>
 
           <div className="radar-bottom">
