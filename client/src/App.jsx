@@ -305,6 +305,8 @@ function TargetLockHUD({ target }) {
 
 function App(){
   const [connectionStatus, setConnectionStatus] = useState("Connecting");
+  const [connectionSince, setConnectionSince] = useState(null);
+  const [connectionUptime, setConnectionUptime] = useState(0);
 
   const [replayStatus, setReplayStatus] = useState({
     running: false,
@@ -317,107 +319,134 @@ function App(){
   const [sweepAngle, setSweepAngle] = useState(0);
   const [lastUpdate, setLastUpdate] = useState(null);
   const telemetryHistory = useRef({});
-  useEffect(() => {
+ useEffect(() => {
 
-    const handleConnect = () => {
-      setConnectionStatus("Connected");
-    };
+  const handleConnect = () => {
+    const now = Date.now();
 
-    const handleDisconnect = () => {
-      setConnectionStatus("Disconnected");
-    };
-
-    const handleStatus = (data) => {
-      setReplayStatus(data);
-    };
-
-    const handleUpdate = (data) => {
-  const target = {
-    ...data,
-    receivedAt: Date.now(),
+    setConnectionStatus("Connected");
+    setConnectionSince(now);
+    setConnectionUptime(0);
   };
 
- const trackId = String(data.track_id);
-
-const previousHistory =
-  telemetryHistory.current[trackId] || {
-    rcs: [],
-    velocity: [],
-    probability: [],
+  const handleDisconnect = () => {
+    setConnectionStatus("Disconnected");
+    setConnectionSince(null);
+    setConnectionUptime(0);
   };
 
-const nextHistory = {
-  rcs: [
-    ...previousHistory.rcs,
-    Number(data.rcs_dbsm) || 0,
-  ].slice(-60),
+  const handleStatus = (data) => {
+    setReplayStatus(data);
+  };
 
-  velocity: [
-    ...previousHistory.velocity,
-    Number(data.radial_velocity_mps) || 0,
-  ].slice(-60),
-
-  probability: [
-    ...previousHistory.probability,
-    Number(data.uav_probability) || 0,
-  ].slice(-60),
-};
-
-telemetryHistory.current[trackId] = nextHistory;
-
-  setTargets((previous) => {
-    const next = {
-      ...previous,
-      [data.track_id]: target,
+  const handleUpdate = (data) => {
+    const target = {
+      ...data,
+      receivedAt: Date.now(),
     };
 
-    const entries = Object.entries(next)
-      .sort(
-        (a, b) =>
-          b[1].receivedAt - a[1].receivedAt
+    const trackId = String(data.track_id);
+
+    const previousHistory =
+      telemetryHistory.current[trackId] || {
+        rcs: [],
+        velocity: [],
+        probability: [],
+      };
+
+    const nextHistory = {
+      rcs: [
+        ...previousHistory.rcs,
+        Number(data.rcs_dbsm) || 0,
+      ].slice(-60),
+
+      velocity: [
+        ...previousHistory.velocity,
+        Number(data.radial_velocity_mps) || 0,
+      ].slice(-60),
+
+      probability: [
+        ...previousHistory.probability,
+        Number(data.uav_probability) || 0,
+      ].slice(-60),
+    };
+
+    telemetryHistory.current[trackId] =
+      nextHistory;
+
+    setTargets((previous) => {
+      const next = {
+        ...previous,
+        [data.track_id]: target,
+      };
+
+      const entries = Object.entries(next)
+        .sort(
+          (a, b) =>
+            b[1].receivedAt - a[1].receivedAt
+        )
+        .slice(0, MAX_TARGETS);
+
+      return Object.fromEntries(entries);
+    });
+
+    setSelectedTrack(
+      (current) => current ?? data.track_id
+    );
+
+    setLastUpdate(Date.now());
+  };
+
+  const handleComplete = (data) => {
+    setReplayStatus({
+      running: false,
+      current_index: data.total_observations,
+      total_observations: data.total_observations,
+    });
+  };
+
+  const handleError = (data) => {
+    console.error("Radar error:", data);
+  };
+
+  if (socket.connected) {
+    handleConnect();
+  }
+
+  socket.on("connect", handleConnect);
+  socket.on("disconnect", handleDisconnect);
+  socket.on("radar:status", handleStatus);
+  socket.on("radar:update", handleUpdate);
+  socket.on("radar:complete", handleComplete);
+  socket.on("radar:error", handleError);
+
+  return () => {
+    socket.off("connect", handleConnect);
+    socket.off("disconnect", handleDisconnect);
+    socket.off("radar:status", handleStatus);
+    socket.off("radar:update", handleUpdate);
+    socket.off("radar:complete", handleComplete);
+    socket.off("radar:error", handleError);
+  };
+
+}, []);
+
+ useEffect(() => {
+  if (!connectionSince) {
+    setConnectionUptime(0);
+    return;
+  }
+
+  const timer = setInterval(() => {
+    setConnectionUptime(
+      Math.floor(
+        (Date.now() - connectionSince) / 1000
       )
-      .slice(0, MAX_TARGETS);
+    );
+  }, 1000);
 
-    return Object.fromEntries(entries);
-  });
-
-  setSelectedTrack(
-    (current) => current ?? data.track_id
-  );
-
-  setLastUpdate(Date.now());
-};
-
-    const handleComplete = (data) => {
-      setReplayStatus({
-        running: false,
-        current_index: data.total_observations,
-        total_observations: data.total_observations,
-      });
-    };
-
-    const handleError = (data) => {
-      console.error("Radar error:", data);
-    };
-
-    if (socket.connected) handleConnect();
-
-    socket.on("connect", handleConnect);
-    socket.on("disconnect", handleDisconnect);
-    socket.on("radar:status", handleStatus);
-    socket.on("radar:update", handleUpdate);
-    socket.on("radar:complete", handleComplete);
-    socket.on("radar:error", handleError);
-
-    return () => {
-      socket.off("connect", handleConnect);
-      socket.off("disconnect", handleDisconnect);
-      socket.off("radar:status", handleStatus);
-      socket.off("radar:update", handleUpdate);
-      socket.off("radar:complete", handleComplete);
-      socket.off("radar:error", handleError);
-    };
-  }, []);
+  return () => clearInterval(timer);
+}, [connectionSince]);
 
   useEffect(() => {
     let animationFrame;
@@ -560,6 +589,17 @@ const lowThreatCount =
         <div className="header-center">
           <span className="header-label">PRIMARY SENSOR</span>
           <strong>RCS / DOPPLER SURVEILLANCE</strong>
+        </div>
+
+        <div className="link-uptime">
+          <span>LINK UPTIME</span>
+          <strong>
+            {connectionStatus === "Connected"
+              ? `${String(Math.floor(connectionUptime / 3600)).padStart(2, "0")}:${String(
+                  Math.floor((connectionUptime % 3600) / 60)
+                ).padStart(2, "0")}:${String(connectionUptime % 60).padStart(2, "0")}`
+              : "--:--:--"}
+          </strong>
         </div>
 
         <div className="header-status">
